@@ -54,6 +54,8 @@ detect_roles(){
   { [ -d /etc/rathole-manager ] || [ -f /etc/systemd/system/rathole-server.service ]; } && PANEL=1
   { [ -f /etc/rathole/node.env ] || [ -f /etc/systemd/system/rathole-client.service ]; } && NODE=1
   { [ -f /opt/ratholehub/hub.py ] || [ -f /etc/systemd/system/ratholehub.service ]; } && HUB=1
+  return 0   # MOHEM: bدون in، agar akharin test false bashad (mesl-e server-e bدون-hub) tabe ba rc=1
+             # barmigardad va zir-e `set -e` kolle update.sh bی-seda exit mishavad.
 }
 
 # ---------- masir-haye har naghsh baraye snapshot (faghat mojood-ha chap mishavand) ----------
