@@ -76,4 +76,29 @@ bash "$RUN" cmd_add rez01 2087
 GOT="$(jq -r '.nodes[]|select(.name=="rez01")|.port' "$ROOT/etc/rathole-manager/state.json")"
 [ "$GOT" != "$NEXT" ] && echo "OK: node port ($GOT) ba direct_port ($NEXT) tadakhol nadarad" || echo "FAIL: node port ba direct_port ($NEXT) yeksan ast"
 
+line "tst 9: direct on (halat standalone) — map va server block"
+jq 'del(.direct_port,.direct_header,.plain_port)' "$ROOT/etc/rathole-manager/state.json" > "$ROOT/s.tmp" && mv "$ROOT/s.tmp" "$ROOT/etc/rathole-manager/state.json"
+jq '.direct_port=8081 | .direct_header="X-Cdn-Id"' "$ROOT/etc/rathole-manager/state.json" > "$ROOT/s.tmp" && mv "$ROOT/s.tmp" "$ROOT/etc/rathole-manager/state.json"
+bash "$RUN" regenerate
+CONF="$ROOT/etc/nginx/conf.d/rathole.conf"
+grep -q 'map \$http_x_cdn_id \$direct_node' "$CONF" && echo "OK: map 1 (\$http var) hast" || echo "FAIL: map 1 nist"
+grep -q 'map \$direct_node \$direct_backend' "$CONF" && echo "OK: map 2 hast" || echo "FAIL: map 2 nist"
+grep -qE '^\s*listen 8081;' "$CONF" && echo "OK: listen 8081 hast" || echo "FAIL: listen 8081 nist"
+grep -q 'proxy_pass http://127.0.0.1:\$direct_backend;' "$CONF" && echo "OK: proxy_pass direct_backend" || echo "FAIL: proxy_pass direct_backend nist"
+# node-e non-SNI bayad dar map 1 bashad; trk01 az tst 2 hast
+grep -qE '"trk01"\s+[0-9]+;' "$CONF" && echo "OK: trk01 dar map" || echo "FAIL: trk01 dar map nist"
+
+line "tst 10: header-e delkhah -> motaghayer-e \$http dorost"
+jq '.direct_header="X-My-Route"' "$ROOT/etc/rathole-manager/state.json" > "$ROOT/s.tmp" && mv "$ROOT/s.tmp" "$ROOT/etc/rathole-manager/state.json"
+bash "$RUN" regenerate
+grep -q 'map \$http_x_my_route \$direct_node' "$CONF" && echo "OK: X-My-Route -> \$http_x_my_route" || echo "FAIL: transform-e header ghalat"
+# baazgardandan be pishfarz baraye testhaye baadi
+jq '.direct_header="X-Cdn-Id"' "$ROOT/etc/rathole-manager/state.json" > "$ROOT/s.tmp" && mv "$ROOT/s.tmp" "$ROOT/etc/rathole-manager/state.json"
+
+line "tst 11: node-e SNI dar map-e direct nabashad"
+bash "$RUN" cmd_add gm01 2087 2>/dev/null
+jq '(.nodes[]|select(.name=="gm01")|.sni)="ex.com"' "$ROOT/etc/rathole-manager/state.json" > "$ROOT/s.tmp" && mv "$ROOT/s.tmp" "$ROOT/etc/rathole-manager/state.json"
+bash "$RUN" regenerate
+sed -n '/map \$http_x_cdn_id \$direct_node/,/}/p' "$CONF" | grep -q '"gm01"' && echo "FAIL: node SNI dar map" || echo "OK: node SNI hazf shod az map"
+
 echo "SANDBOX=$ROOT"
