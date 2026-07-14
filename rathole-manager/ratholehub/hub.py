@@ -168,6 +168,7 @@ RE_PW      = re.compile(r"^.{6,128}\Z")   # hdaghl 6 karaktr baraye ramz
 RE_EMAIL   = re.compile(r"^[A-Za-z0-9._%+-]{1,64}@[A-Za-z0-9.-]{1,190}\.[A-Za-z]{2,20}\Z")
 RE_PATH    = re.compile(r"^/[A-Za-z0-9_./-]{1,255}\Z")   # masir file gvahi (mtlgh)
 RE_SLUG    = re.compile(r"^[A-Za-z0-9._-]{1,64}/[A-Za-z0-9._-]{1,64}\Z")   # owner/repo-ye GitHub
+RE_HEADER  = re.compile(r"^[A-Za-z0-9-]{1,40}\Z")   # naam-e header-e masiryabi-ye direct
 
 # ---------- whitelist dstvrha (bedoon shl dlkhvah) ----------
 # har action → sazndhi argumenthaye amn. brmigrdand list arg baraye CLI.
@@ -254,6 +255,16 @@ def build_iran_cmd(action, a):
         port = str(a.get("port", "8880") or "8880")
         if not RE_PORT.match(port): return None
         return ["ratholectl", "plain", "on", port]
+    # ---- direct-IP: masiryabi ba header rooye port-e sade (bedoon TLS/auth) ----
+    if action == "direct_status": return ["ratholectl", "direct", "status"]
+    if action == "direct_show":   return ["ratholectl", "direct", "show"]
+    if action == "direct_off":    return ["ratholectl", "direct", "off"]
+    if action == "direct_on":
+        port   = str(a.get("port", "8081") or "8081")
+        header = str(a.get("header", "X-Cdn-Id") or "X-Cdn-Id")
+        if not RE_PORT.match(port):     return None
+        if not RE_HEADER.match(header): return None
+        return ["ratholectl", "direct", "on", "--port", port, "--header", header]
     # ---- noise: tunnel-e ramznegari-shode (Noise) rooye instans-e dovom ----
     if action == "noise_status": return ["ratholectl", "noise", "status"]
     if action == "noise_show":   return ["ratholectl", "noise", "show"]
@@ -450,6 +461,7 @@ WRITE_ACTIONS = {
     "tls_cert", "domain_add", "domain_rm", "domain_primary",
     "fakeweb_start", "fakeweb_stop", "fakeweb_rm", "tune", "restart",
     "plain_on", "plain_off",
+    "direct_on", "direct_off",
     "noise_on", "noise_off", "noise_node_on", "noise_node_off",
 
     "backup", "enable", "regen_full", "regen",
