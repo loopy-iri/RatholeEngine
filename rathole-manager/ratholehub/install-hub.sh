@@ -24,7 +24,7 @@ install -m755 "$SCRIPT_DIR/hub.py" "$APP_DIR/hub.py"
 log "hub.py nasb shod: $APP_DIR/hub.py"
 
 # astij kardan bainriha baraye ghablit deploy (apdit az rah dvr nodeha)
-for f in ratholectl ratholenode update.sh kcptest-iran.sh kcptest-node.sh; do
+for f in ratholectl ratholenode common.sh update.sh kcptest-iran.sh kcptest-node.sh; do
   [ -f "$SCRIPT_DIR/../$f" ] && install -m755 "$SCRIPT_DIR/../$f" "$BUNDLE_DIR/$f"
 done
 log "bundle baraye deploy amade shod: $BUNDLE_DIR"

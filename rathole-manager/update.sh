@@ -322,7 +322,7 @@ UNIT
       log "beroozresani shod: /opt/ratholehub/hub.py"
       mkdir -p /opt/ratholehub/bundle
       local f
-      for f in ratholectl ratholenode update.sh kcptest-iran.sh kcptest-node.sh; do
+      for f in ratholectl ratholenode common.sh update.sh kcptest-iran.sh kcptest-node.sh; do
         [ -f "$SCRIPT_DIR/$f" ] && install -m 755 "$SCRIPT_DIR/$f" "/opt/ratholehub/bundle/$f"
       done
       systemctl daemon-reload 2>/dev/null || true

@@ -492,7 +492,7 @@ def deploy_to_server(server):
         return {"rc": 0, "out": "[mock deploy→%s] scp + update.sh" % server.get("name"), "err": ""}
     cfg = get_config()
     bundle = cfg.get("bundle_dir", "/opt/ratholehub/bundle")
-    files = ["ratholectl", "ratholenode", "update.sh", "kcptest-iran.sh", "kcptest-node.sh"]
+    files = ["ratholectl", "ratholenode", "common.sh", "update.sh", "kcptest-iran.sh", "kcptest-node.sh"]
     srcs = [os.path.join(bundle, f) for f in files if os.path.exists(os.path.join(bundle, f))]
     if not srcs:
         return {"rc": 1, "out": "", "err": "bundle khali ast: %s" % bundle}
@@ -1316,7 +1316,7 @@ const DICT={
   dt_le:'greftan gvahi (domain/email)',dt_get:'begir',dt_apply:'emal (regen)',
   dt_list:'gvahihaye mojood rooye in server:',dt_active:'faal',dt_expiry:'enghza',dt_none:'gvahii peyda nashod.',
   dt_served:'damnhhaye faal rooye in server:',dt_kind:'nooe',dt_primary:'asli',dt_extra:'ezafi',dt_add:'afzoodan damnh',dt_add_btn:'+ damnh',dt_makeprimary:'asli kon',dt_mp_confirm:'damnh asli avaz shavad be',
-  running:'ejra-ye',on:'rooye',
+  running:'ejra-ye',on:'rooye',ok_rc:'anjam shod',fail_rc:'nashod',
  },
  en:{
   auto:'Auto refresh',refresh:'Refresh',settings:'Settings',audit:'Activity log',logout:'Logout',
@@ -1375,7 +1375,7 @@ const DICT={
   dt_le:'Obtain cert (domain/email)',dt_get:'Get',dt_apply:'Apply (regen)',
   dt_list:'Certificates on this server:',dt_active:'active',dt_expiry:'expiry',dt_none:'No certificates found.',
   dt_served:'Active domains on this server:',dt_kind:'Type',dt_primary:'primary',dt_extra:'extra',dt_add:'Add domain',dt_add_btn:'+ domain',dt_makeprimary:'Make primary',dt_mp_confirm:'Switch primary domain to',
-  running:'running',on:'on',
+  running:'running',on:'on',ok_rc:'done',fail_rc:'failed',
  }
 };
 function t(k){return (DICT[LANG]&&DICT[LANG][k])||DICT.fa[k]||k;}
@@ -1591,8 +1591,15 @@ function renderNode(n,ov){
 function outModal(title,text){var id='om_'+Math.random().toString(36).slice(2);modal('<h3>'+h(title)+'</h3><pre id="'+id+'" style="max-height:52vh;overflow:auto;white-space:pre-wrap;user-select:text;-webkit-user-select:text">'+h(text)+'</pre><div class="row" style="margin-top:10px"><button class="g" onclick="copyText(\''+id+'\')">'+t('copy_out')+'</button> <button class="gh" onclick="closeModal()">'+t('close')+'</button></div>');}
 async function run(n,a,args){toast(t('running')+' '+a+' '+t('on')+' '+n+' …');
  const {j}=await api('POST','api/servers/'+n+'/action',{action:a,args:args||{}});
- const out=((j.cmd?('$ '+j.cmd+'\n'):'')+((j.out||'')+(j.err?('\n'+j.err):''))).trim()||JSON.stringify(j);
- if(out){if(out.length>140||out.indexOf(String.fromCharCode(10))>=0){outModal(a,out);}else{toast(out);}} loadOv(n);}
+ const rc=(j&&typeof j.rc==='number')?j.rc:null;
+ const ok=(rc===0), bad=(rc!==null&&rc!==0);
+ const verdict=ok?('✓ '+t('ok_rc')):(bad?('✗ '+t('fail_rc')+' (rc='+rc+')'):'');
+ const body=((j.cmd?('$ '+j.cmd+'\n'):'')+((j.out||'')+(j.err?('\n'+j.err):''))).trim();
+ const full=((verdict?verdict+(body?'\n\n':''):'')+body)||JSON.stringify(j);
+ if(bad){outModal(a+' ✗',full);}                                    // shekast: hamishe modal, ta gom nashavad
+ else if(body&&(body.length>140||body.indexOf(String.fromCharCode(10))>=0)){outModal(a+' ✓',full);}
+ else{toast(verdict+(body?(' — '+body):''));}
+ loadOv(n);}
 async function doDeploy(n){if(!confirm(t('cf_deploy')+' '+n+' ?'))return; run(n,'deploy');}
 async function showDetails(n){toast(t('loading_det'));
  const {j}=await api('GET','api/servers/'+n+'/details');
