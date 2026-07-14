@@ -215,7 +215,7 @@ next_port(){ # $1=field (port|api_local_port) $2=start
   used="$(jq -r '
     ([.nodes[].port // empty]
      + [.nodes[].api_local_port // empty]
-     + [.control_port, .fake_port, .sub_port, .internal_port, .plain_port, .hub_port, .noise_port]
+     + [.control_port, .fake_port, .sub_port, .internal_port, .plain_port, .hub_port, .noise_port, .direct_port]
     ) | map(select(. != null)) | @tsv' "$STATE")"
   p="$start"
   while echo "$used" | tr '\t' '\n' | grep -qx "$p"; do p=$((p+1)); done
