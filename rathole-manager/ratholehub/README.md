@@ -56,6 +56,7 @@ curl -s -H "Authorization: Bearer $TOKEN" -X POST $B/api/servers/rp01/action \
 - **iran**: `ls`, `doctor`, `kcp_status`, `kcp_show`, `kcp_on{port,profile}`, `kcp_off`, `tune`, `regen`, `game_ls`, `game_add{name,inbound,sni}`, `game_rm{name}`, `game_show{name}`, `game_cert{sni}`
   - `game_cert` گواهی Let's Encrypt می‌گیرد (نیاز: DNSِ SNI به سرور + پورت ۸۰ آزاد). خروجی شامل **کلید خصوصی** است؛ فقط از طریق هابِ احرازشده استفاده کن و لاگ نگه ندار.
   - مدیریت نود: `add_node{name,inbound,api_port?}`, `rm_node{name}`, `show_node{name}` (توکن نصب نود را می‌دهد)
+  - **توگل حالت‌های ورودی/transport**: `plain_on{port}`/`plain_off`/`plain_status`/`plain_show`, `noise_on{port}`/`noise_off`/…, و **`direct_status`/`direct_show`/`direct_off`/`direct_on{port,header}`** برای حالتِ direct-IP (مسیریابی با هدر، بدون TLS). فرمِ UI فیلدهای `port` و `header` را می‌گیرد و هر آرگومان با regex اعتبارسنجی می‌شود (`RE_PORT`، `RE_HEADER = ^[A-Za-z0-9-]{1,40}$`) و به‌صورت argv جدا پاس می‌شود — نه رشتهٔ شل.
   - کشف: `GET /api/servers/<iran>/discover` → لیست نودهای تعریف‌شده در state آن ایران
 - **node**: `show`, `ls`, `upstream_ls`, `kcp_status`, `kcp_on{remote,key,profile}`, `kcp_off`, `upstream_kcp_on{id,remote,key,profile}`, `upstream_kcp_off{id}`, `migrate`, `tune`, `apply`
   - مدیریت سرویس: `add_svc{name,token,inbound}`, `rm_svc{name}`, `upstream_add{id,server,host?}`, `upstream_add_svc{id,name,token,inbound}`

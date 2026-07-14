@@ -215,7 +215,7 @@ next_port(){ # $1=field (port|api_local_port) $2=start
   used="$(jq -r '
     ([.nodes[].port // empty]
      + [.nodes[].api_local_port // empty]
-     + [.control_port, .fake_port, .sub_port, .internal_port, .plain_port, .hub_port, .noise_port]
+     + [.control_port, .fake_port, .sub_port, .internal_port, .plain_port, .hub_port, .noise_port, .direct_port]
     ) | map(select(. != null)) | @tsv' "$STATE")"
   p="$start"
   while echo "$used" | tr '\t' '\n' | grep -qx "$p"; do p=$((p+1)); done
@@ -439,6 +439,38 @@ HB
     echo "    websocket    ${ctrl};"
     echo "}"
     echo
+    # halat direct-IP: masiryabi ba header (bedoon TLS). faghat agar direct_port set bashad.
+    local direct_port direct_header direct_var direct_fallback
+    direct_port="$(jq -r '.direct_port // empty' "$STATE" 2>/dev/null)"
+    direct_header="$(jq -r '.direct_header // "X-Cdn-Id"' "$STATE" 2>/dev/null)"
+    case "$direct_header" in ''|null) direct_header="X-Cdn-Id" ;; esac
+    if [ -n "$direct_port" ] && [ "$direct_port" != null ]; then
+      # esm-e motaghayer nginx: hrvf kvchk, '-' -> '_', pishvand $http_
+      direct_var="\$http_$(printf '%s' "$direct_header" | tr 'A-Z-' 'a-z_')"
+      # fallback-e branch-e khali: agar direct_port == plain_port -> $backend_port (fall-through be path-map)
+      #   vagarna -> fake_port (faghat sait-e fik)
+      local dp_plain; dp_plain="$(jq -r '.plain_port // empty' "$STATE" 2>/dev/null)"
+      if [ -n "$dp_plain" ] && [ "$dp_plain" != null ] && [ "$dp_plain" = "$direct_port" ]; then
+        direct_fallback="\$backend_port"
+      else
+        direct_fallback="${fake}"
+      fi
+      echo "# map 1: header-e masiryabi (= naam-e node) -> port lvkal rathole"
+      echo "map ${direct_var} \$direct_node {"
+      echo "    default      \"\";"
+      jq -r '.nodes[] | select(.sni == null) | [.name,(.port|tostring)] | @tsv' "$STATE" |
+      while IFS=$'\t' read -r n p; do
+        printf '    "%s"   %s;\n' "$n" "$p"
+      done
+      echo "}"
+      echo
+      echo "# map 2: agar header khali/nashnas -> fallback; vagarna -> port-e node"
+      echo "map \$direct_node \$direct_backend {"
+      echo "    default      \$direct_node;"
+      echo "    \"\"           ${direct_fallback};"
+      echo "}"
+      echo
+    fi
     cat <<NGINX
 server {
     ${listen_line_primary}
@@ -489,6 +521,13 @@ NGINX
     # az haman maphaye bala (backend_port/root_backend) estefade mikonad; TLS-i dar kar nist.
     local plain_port; plain_port="$(jq -r '.plain_port // empty' "$STATE" 2>/dev/null)"
     if [ -n "$plain_port" ] && [ "$plain_port" != null ]; then
+      # agar direct_port == plain_port (merge), location / bayad be $direct_backend berad
+      # (header match -> node port; khali -> map2 fallback = $backend_port fall-through).
+      local plain_backend='$backend_port'
+      local dm_port; dm_port="$(jq -r '.direct_port // empty' "$STATE" 2>/dev/null)"
+      if [ -n "$dm_port" ] && [ "$dm_port" != null ] && [ "$dm_port" = "$plain_port" ]; then
+        plain_backend='$direct_backend'
+      fi
       cat <<NGINXP
 server {
     listen ${plain_port};
@@ -509,7 +548,7 @@ server {
         proxy_send_timeout 86400s;
     }
     location / {
-        proxy_pass http://127.0.0.1:\$backend_port;
+        proxy_pass http://127.0.0.1:${plain_backend};
         proxy_http_version 1.1;
         proxy_set_header Upgrade \$http_upgrade;
         proxy_set_header Connection \$connection_upgrade;
@@ -529,6 +568,36 @@ server {
     }
 }
 NGINXP
+    fi
+    # server-e HTTP-e sade baraye halat direct-IP (header-routing) — faghat agar direct_port set bashad
+    # VA ba plain_port yeksan nabashad (dar soorat-e yeksani, block-e plain khodesh sherkat mikonad — Task 3).
+    local d_port d_plain
+    d_port="$(jq -r '.direct_port // empty' "$STATE" 2>/dev/null)"
+    d_plain="$(jq -r '.plain_port // empty' "$STATE" 2>/dev/null)"
+    if [ -n "$d_port" ] && [ "$d_port" != null ] && [ "$d_port" != "$d_plain" ]; then
+      cat <<NGINXD
+server {
+    listen ${d_port};
+    listen [::]:${d_port};
+    server_name _;
+
+    # header matched -> port-e node; vagarna -> fallback (map 2)
+    location / {
+        proxy_pass http://127.0.0.1:\$direct_backend;
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade \$http_upgrade;
+        proxy_set_header Connection \$connection_upgrade;
+        proxy_set_header Host \$host;
+        proxy_set_header X-Real-IP \$remote_addr;
+        proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
+        proxy_buffering off;
+        proxy_request_buffering off;
+        tcp_nodelay on;
+        proxy_read_timeout 3600s;
+        proxy_send_timeout 3600s;
+    }
+}
+NGINXD
     fi
     # server blockhaye damnhhaye ezafi (chand damnh hamzaman rooye hamin server Iran)
 
@@ -1492,6 +1561,82 @@ print_plain_connect(){
   echo "nokte: serviceha/tokenha/path karbaran tghiiri nmiknnd; fght TLS-e masir-e tunnel bardashte mishavad."
 }
 
+# ---------- direct-IP: masiryabi ba header rooye port-e sade (bedoon TLS/auth) ----------
+cmd_direct(){
+  need_root; need_bin jq; ensure_state
+  local sub="${1:-status}"; shift || true
+  case "$sub" in
+    on)
+      local port="" header="" a
+      while [ $# -gt 0 ]; do
+        case "$1" in
+          --port)   port="${2:-}"; shift 2 || shift;;
+          --header) header="${2:-}"; shift 2 || shift;;
+          *) a="$1"; shift;;
+        esac
+      done
+      port="${port:-8081}"; header="${header:-X-Cdn-Id}"
+      echo "$port" | grep -qE '^[0-9]+$' || die "port bayad adad bashad."
+      [ "$port" = "443" ] && die "port 443 baraye masir-e TLS/game rezerv ast; port-e digari (masalan 8081) bede."
+      local internal; internal="$(jq -r '.internal_port // 8443' "$STATE" 2>/dev/null)"
+      [ "$port" = "$internal" ] && die "port $port ba internal_port-e game/SNI tadakhol darad; port-e digari bede."
+      echo "$header" | grep -qE '^[A-Za-z0-9-]{1,40}$' || die "header faghat hrvf/adad/khttirh (-) mjaz ast."
+      state_set '.direct_port' "$port" num
+      state_set '.direct_header' "$header"
+      log "halat direct-IP (masiryabi ba header, bedoon TLS) faal shod: listener HTTP rooye port $port, header '$header'."
+      warn "firewall: port TCP $port ra baz kon (masalan: ufw allow $port/tcp)."
+      warn "in listener bedoon TLS/auth ast; ehrazhoviat dar laye-ye proxy-e daroon-e tunnel ast."
+      command -v ufw >/dev/null 2>&1 && ufw allow "$port/tcp" >/dev/null 2>&1 || true
+      regenerate
+      print_direct_connect
+      ;;
+    off)
+      local tmp; tmp="$(mktemp)"; jq 'del(.direct_port, .direct_header)' "$STATE" > "$tmp" && mv "$tmp" "$STATE"
+      log "halat direct-IP khamoosh shod (listener HTTP hazf shod). port-e firewall ra mitavani bebandi."
+      regenerate
+      ;;
+    status)
+      local dp dh; dp="$(jq -r '.direct_port // empty' "$STATE" 2>/dev/null)"; dh="$(jq -r '.direct_header // empty' "$STATE" 2>/dev/null)"
+      if [ -n "$dp" ] && [ "$dp" != null ]; then
+        echo "direct-IP (header-based): $(c_g 'roshan')   port $dp   header: ${dh:-X-Cdn-Id}"
+        command -v ss >/dev/null 2>&1 && { ss -ltnH "sport = :$dp" 2>/dev/null | grep -q . && echo "  gvshdadn TCP:$dp: $(c_g 'blh')" || echo "  gvshdadn TCP:$dp: $(c_r 'khir')"; }
+        local nlist; nlist="$(jq -r --arg h "${dh:-X-Cdn-Id}" '[.nodes[] | select(.sni==null) | "\(.name) -> \"\($h): \(.name)\""] | join(",  ")' "$STATE" 2>/dev/null)"
+        [ -n "$nlist" ] && echo "  node-ha:  $nlist"
+        echo "  $(c_y 'hoshdar'): in listener bedoon TLS/auth ast; ehrazhoviat dar laye-ye proxy-e daroon-e tunnel ast."
+      else
+        echo "direct-IP (header-based): $(c_y 'khamoosh')   (tunnelha rooye websocket/443 ba TLS)"
+      fi
+      ;;
+    show) print_direct_connect "${1:-}" ;;
+    *) die "estefade: ratholectl direct <on [--port P] [--header H]|off|status|show [name]>" ;;
+  esac
+}
+
+print_direct_connect(){
+  local dp dh ip name path node_hdr
+  dp="$(jq -r '.direct_port // empty' "$STATE" 2>/dev/null)"
+  [ -n "$dp" ] && [ "$dp" != null ] || { warn "direct khamoosh ast; aval: ratholectl direct on"; return; }
+  dh="$(jq -r '.direct_header // "X-Cdn-Id"' "$STATE" 2>/dev/null)"; case "$dh" in ''|null) dh="X-Cdn-Id" ;; esac
+  ip="$(curl -fsS4 https://api.ipify.org 2>/dev/null || hostname -I 2>/dev/null | awk '{print $1}')"
+  name="${1:-}"
+  if [ -n "$name" ]; then
+    jq -e --arg n "$name" '.nodes[]|select(.name==$n)' "$STATE" >/dev/null 2>&1 || die "node '$name' peyda nashod."
+    path="/$name"; node_hdr="$name"
+  else
+    path="/<node_name>"; node_hdr="<node_name>"
+  fi
+  echo
+  echo "$(c_y '──────── tanzim-e client (Xray/V2Ray) baraye halat direct-IP ────────')"
+  echo "transport: WebSocket bedoon TLS"
+  echo "  address : ${ip:-<IRAN_IP>}"
+  echo "  port    : ${dp}"
+  echo "  ws path : ${path}"
+  echo "  ws Host : myket.ir      # decoy — har domain-e bikhatari mishavad"
+  echo "  header  : ${dh}: ${node_hdr}"
+  echo "$(c_y '──────────────────────────────────────────────────')"
+  echo "nokte: in masir bedoon TLS/auth ast; ehraz-e hoviat dar khod-e proxy (VLESS/VMess UUID) anjam mishavad."
+}
+
 # ---------- noise: transport-e ramznegari-shode (rathole Noise) rooye instans-e dovom, bedoon nginx/TLS/cert ----------
 # yek prose-ye rathole-e dovom (rathole-noise) rooye port-e TCP-e omomi. har node ba 'noise node <name> on'
 # be in masir montaghel mishavad; service-e an az server.toml be noise-server.toml jabeja mishavad.
@@ -1798,6 +1943,7 @@ main(){
     hub)    cmd_hub "${1:-}" "${2:-}" ;;
     kcp)    cmd_kcp "$@" ;;
     plain)  cmd_plain "${1:-}" "${2:-}" ;;
+    direct) cmd_direct "$@" ;;
     noise)  cmd_noise "$@" ;;
 
     game)   cmd_game "$@" ;;
