@@ -42,7 +42,7 @@ A node's `name` is simultaneously its URL path, its nginx `map` entry, and the X
 
 - Single-file stdlib HTTP server; all UI (HTML/JS/CSS) and i18n (fa/en dicts) are inline. `Handler` is the router; `main()` serves `ThreadingHTTPServer`.
 - **Security-critical:** it never runs raw strings on servers. `build_iran_cmd` / `build_node_cmd` map an `action` + validated args (via the `RE_*` regexes) to an **argv list**, executed over SSH with each arg passed separately (`run_on_server` → `_ssh_base`). When adding a server action, add it to the right `build_*_cmd` **and** the allow-list of actions, and validate every arg with a regex — do not interpolate user input into a shell string.
-- `deploy_to_server` scp's the CLI tools + `update.sh` to a server and runs `update.sh` (remote upgrade). `provision_server` bootstraps SSH key auth.
+- `deploy_to_server` (the hub "update" button) fetches the latest Release `install.sh` **on the server itself** (over SSH, via the ghproxy mirror loop) and runs it with `--update` — so servers pull from GitHub and no longer depend on the hub's local `bundle_dir` being fresh. The repo slug comes from config `gh_repo` (default `loopy-iri/RatholeEngine`, validated by `RE_SLUG`); the remote command is a fixed `bash -c` script with only that validated slug interpolated. `provision_server` bootstraps SSH key auth.
 
 ## Commands
 
@@ -73,6 +73,8 @@ sudo bash bootstrap.sh --local ./rathole-manager.zip --panel --domain ... --full
 ## Update, backup & rollback
 
 `update.sh` is the safe upgrade path (auto-detects panel/node/hub). Before touching anything it takes a **full snapshot** (CLI + configs + systemd units, per role) into `/var/backups/rathole-manager/pre-update-<ts>/` (`manifest.txt` + `backup.tar.gz`), applies the update, runs a per-role **health check** (`rathole-server`/`rathole-client`/`ratholehub` active + `nginx -t`), and **auto-rolls-back** to the snapshot on failure. Retention = last 7 (env `RATHOLE_BACKUP_RETENTION`).
+
+- **From the server itself:** `ratholectl update` / `ratholenode update` (new subcommands) download the latest Release `install.sh` from GitHub — through the ghproxy mirror loop so it works from inside Iran — and run it with `--update` (which reaches this same `update.sh` via `bootstrap.sh --local`). The hub "update" button (`deploy_to_server`) does the identical thing remotely over SSH. Slug from `RATHOLE_GH` (default `loopy-iri/RatholeEngine`), version from `RATHOLE_RELEASE` (default `latest`).
 
 - Manual: `update.sh --list-backups`, `update.sh --rollback [<ts>]`, `update.sh --no-rollback`. `bootstrap.sh` forwards `--rollback`/`--list-backups` (and menu entries 5/6) to `update.sh`, using a local `update.sh` without re-downloading when possible.
 - This complements the narrower `.rathole-good.bak` (nginx rollback inside `regenerate`) and `ratholectl backup`/`ratholenode backup` (state-only tarballs). The rathole binary is not changed by `update.sh`, so it is intentionally excluded from snapshots.

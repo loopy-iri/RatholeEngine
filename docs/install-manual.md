@@ -188,6 +188,11 @@ sudo systemctl enable --now rathole-server
 sudo ratholectl doctor        # health check
 ```
 
+> **Later updates:** `sudo ratholectl update` pulls the latest GitHub Release and
+> runs the full snapshot + health-check + auto-rollback update. Same for
+> `sudo ratholenode update` on a node. Both fall back through ghproxy mirrors, so
+> they work from inside Iran. The hub's **Update** button does the same over SSH.
+
 ### 2.8 Add a node
 
 Every time you add a node, `ratholectl` mutates state and regenerates + hot-reloads the configs (without dropping active tunnels):
@@ -357,6 +362,7 @@ sudo ratholenode upstream add <id> <server:443>
 sudo ratholenode upstream add-svc <id> <name> <token> <inbound>
 
 sudo ratholenode backup              # back up node state
+sudo ratholenode update              # full update from GitHub (latest Release; snapshot + auto-rollback)
 ```
 
 ---

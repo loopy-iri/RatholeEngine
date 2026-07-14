@@ -1699,6 +1699,29 @@ menu(){
   done
 }
 
+# beroozresani-e kamel az GitHub (akharin Release): install.sh ra migirad va --update mizanad.
+# install.sh khodesh snapshot + health-check + rollback-e khodkar ra (az tarigh bootstrap→update.sh) ejra mikonad.
+# mirror-haye ghproxy baraye dor-zadan-e filtering-e Iran (hamsan-e install-panel.sh).
+cmd_update(){
+  need_root
+  command -v curl >/dev/null 2>&1 || die "curl lazem ast (apt install -y curl)."
+  local gh="${RATHOLE_GH:-loopy-iri/RatholeEngine}" rel="${RATHOLE_RELEASE:-latest}"
+  local path; if [ "$rel" = "latest" ]; then path="releases/latest/download/install.sh"; else path="releases/download/${rel}/install.sh"; fi
+  local mirrors=("" "https://ghproxy.net/" "https://gh-proxy.com/" "https://mirror.ghproxy.com/")
+  local tmp m ok=0; tmp="$(mktemp)"
+  log "download install.sh az GitHub Release: $gh ($rel)..."
+  for m in "${mirrors[@]}"; do
+    if curl -fSL --retry 2 --connect-timeout 20 "${m}https://github.com/${gh}/${path}" -o "$tmp" 2>/dev/null; then ok=1; break; fi
+    [ -n "$m" ] && warn "in mirror javab nadad, badi..."
+  done
+  [ "$ok" -eq 1 ] || { rm -f "$tmp"; die "download install.sh az hameye mirror-ha shekast khord (filtering/slug/release ra barresi kon)."; }
+  log "ejra-ye update-e kamel (snapshot + health-check + rollback-e khodkar)..."
+  RATHOLE_GH="$gh" RATHOLE_RELEASE="$rel" bash "$tmp" --update
+  local rc=$?
+  rm -f "$tmp"
+  return "$rc"
+}
+
 usage(){
   cat <<USAGE
 ratholectl — mdirit tunnel rathole mvltilvkishn
@@ -1732,6 +1755,7 @@ dstvrha:
   game rm <name> | ls | show <name> | cert <sni>   mdirit service game va gvahi
   restart                      restart kamel rathole-server (tunnelha lhzhai ghat)
   enable                       faalsazi va start rathole-server
+  update                       beroozresani-e kamel az GitHub (akharin Release; snapshot + rollback-e khodkar)
   menu                         mnvi taamoli (pishfarz)
 USAGE
 }
@@ -1779,6 +1803,7 @@ main(){
     game)   cmd_game "$@" ;;
     restart) need_root; systemctl restart "$RATHOLE_SVC" && log "$RATHOLE_SVC restart shod (hame tunnelha lhzhai ghat shdnd)." ;;
     enable) need_root; systemctl enable --now "$RATHOLE_SVC"; log "$RATHOLE_SVC faal shod." ;;
+    update) cmd_update ;;
     menu)   menu ;;
     -h|--help|help) usage ;;
     *) err "dstvr nashenakhte: $cmd"; usage; exit 1 ;;

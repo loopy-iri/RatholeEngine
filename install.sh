@@ -42,11 +42,23 @@ install_prereqs(){
   else warn "pkijmnijr shnakhth nshd; motmaen shv curl/unzip/tar nasb-and."; fi
 }
 
-fetch(){ # $1=url $2=out ; ba curl ya wget، ba fallback
+fetch1(){ # $1=url $2=out ; ba curl ya wget (yek talash)
   local url="$1" out="$2"
   if command -v curl >/dev/null 2>&1; then curl -fSL --retry 3 --connect-timeout 20 "$url" -o "$out"
   elif command -v wget >/dev/null 2>&1; then wget -q -O "$out" "$url"
   else return 1; fi
+}
+
+# mirror-haye ghproxy baraye dor zadan-e filtering-e GitHub az dakhl-e Iran (hamsan-e install-panel.sh).
+RATHOLE_MIRRORS=("" "https://ghproxy.net/" "https://gh-proxy.com/" "https://mirror.ghproxy.com/")
+
+fetch(){ # $1=url (kamel، mesl https://github.com/...) $2=out ; mostaghim، sps mirror-ha
+  local url="$1" out="$2" m
+  for m in "${RATHOLE_MIRRORS[@]}"; do
+    if fetch1 "${m}${url}" "$out"; then return 0; fi
+    [ -n "$m" ] && warn "in mirror javab nadad، badi..."
+  done
+  return 1
 }
 
 main(){

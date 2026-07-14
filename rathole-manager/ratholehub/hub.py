@@ -167,6 +167,7 @@ RE_ID      = re.compile(r"^[A-Za-z0-9_-]{1,40}\Z")
 RE_PW      = re.compile(r"^.{6,128}\Z")   # hdaghl 6 karaktr baraye ramz
 RE_EMAIL   = re.compile(r"^[A-Za-z0-9._%+-]{1,64}@[A-Za-z0-9.-]{1,190}\.[A-Za-z]{2,20}\Z")
 RE_PATH    = re.compile(r"^/[A-Za-z0-9_./-]{1,255}\Z")   # masir file gvahi (mtlgh)
+RE_SLUG    = re.compile(r"^[A-Za-z0-9._-]{1,64}/[A-Za-z0-9._-]{1,64}\Z")   # owner/repo-ye GitHub
 
 # ---------- whitelist dstvrha (bedoon shl dlkhvah) ----------
 # har action → sazndhi argumenthaye amn. brmigrdand list arg baraye CLI.
@@ -487,33 +488,37 @@ def _ssh_base(cfg, server):
     return ssh
 
 def deploy_to_server(server):
-    # askriptha ra ba scp be server mifrstd va update.sh ra ejra mikonad (apdit az rah dvr).
+    # apdit az GitHub: install.sh-e akharin Release ra rooye server migirad (ba mirror-haye
+    # ghproxy baraye dor zadan-e filtering) va ba --update ejra mikonad. digar be bundle-e
+    # mahalli-ye hub vabaste nist — server hamishe akharin noskhe-ye montasher-shode ra migirad.
     if MOCK:
-        return {"rc": 0, "out": "[mock deploy→%s] scp + update.sh" % server.get("name"), "err": ""}
+        return {"rc": 0, "out": "[mock deploy→%s] github install.sh --update (akharin Release)" % server.get("name"), "err": ""}
     cfg = get_config()
-    bundle = cfg.get("bundle_dir", "/opt/ratholehub/bundle")
-    files = ["ratholectl", "ratholenode", "common.sh", "update.sh", "kcptest-iran.sh", "kcptest-node.sh"]
-    srcs = [os.path.join(bundle, f) for f in files if os.path.exists(os.path.join(bundle, f))]
-    if not srcs:
-        return {"rc": 1, "out": "", "err": "bundle khali ast: %s" % bundle}
-    user = server.get("ssh_user", "root"); host = server["host"]; port = str(server.get("ssh_port", 22))
-    keyopt = (["-i", cfg["ssh_key_path"]] if cfg.get("ssh_key_path") else [])
+    # slug az config (sabet، na vorodi-ye karbar) va ba regex etebarsanji mishavad.
+    gh = str(cfg.get("gh_repo", "loopy-iri/RatholeEngine"))
+    if not RE_SLUG.match(gh):
+        return {"rc": 1, "out": "", "err": "gh_repo namotabar dar config: %r" % gh}
     base = _ssh_base(cfg, server)
+    # yek script-e khoddATka ke rooye server ejra mishavad. tanha meghdar-e tazrigh-shode
+    # slug-e etebarsanji-shode ast (RE_SLUG). mirror-ha hamsan-e install.sh/install-panel.sh.
+    remote = r'''set -e
+GH="%s"
+URL="https://github.com/$GH/releases/latest/download/install.sh"
+T="$(mktemp)"
+trap 'rm -f "$T"' EXIT
+ok=0
+for M in "" "https://ghproxy.net/" "https://gh-proxy.com/" "https://mirror.ghproxy.com/"; do
+  if curl -fsSL --connect-timeout 20 --retry 2 "${M}${URL}" -o "$T" 2>/dev/null; then ok=1; break; fi
+done
+[ "$ok" = 1 ] || { echo "download install.sh az hameye mirror-ha shekast khord (filtering?)" >&2; exit 1; }
+RATHOLE_GH="$GH" bash "$T" --update
+''' % gh
     try:
-        r = subprocess.run(base + ["mkdir", "-p", "/root/rathole-manager"],
-                           capture_output=True, text=True, timeout=30)
-        if r.returncode != 0:
-            return {"rc": r.returncode, "out": r.stdout, "err": "mkdir: " + r.stderr}
-        scp = ["scp"] + list(cfg.get("ssh_opts", [])) + keyopt + ["-P", port] + srcs + \
-              ["%s@%s:/root/rathole-manager/" % (user, host)]
-        r = subprocess.run(scp, capture_output=True, text=True, timeout=120)
-        if r.returncode != 0:
-            return {"rc": r.returncode, "out": r.stdout, "err": "scp: " + r.stderr}
-        r = subprocess.run(base + ["bash", "/root/rathole-manager/update.sh"],
-                           capture_output=True, text=True, timeout=180)
+        r = subprocess.run(base + ["bash", "-c", remote],
+                           capture_output=True, text=True, timeout=600)
         return {"rc": r.returncode, "out": _strip_ansi(r.stdout), "err": _strip_ansi(r.stderr)}
     except subprocess.TimeoutExpired:
-        return {"rc": 124, "out": "", "err": "SSH/scp timeout"}
+        return {"rc": 124, "out": "", "err": "SSH timeout (apdit-e GitHub bish az 600s tool keshid)"}
     except Exception as e:
         return {"rc": 1, "out": "", "err": str(e)}
 
@@ -593,7 +598,7 @@ def provision_server(d):
         return {"rc": r.returncode, "out": "\n\n".join(logs), "err": "nصب kelid shekast khord: " + emsg}
     # 2) deploy ba kelid (scp scripts + update.sh) — server hanoz dar inventory nist pas mostaghim server dict ra midahim
     dep = deploy_to_server(server)
-    logs.append("== deploy (scp + update.sh) ==\n" + (dep.get("out", "") or "") +
+    logs.append("== deploy (github-update) ==\n" + (dep.get("out", "") or "") +
                 (("\n[stderr] " + dep.get("err", "")) if dep.get("err") else ""))
     # 3) sabt dar inventory (hata agar deploy naghes bood, kelid nصب shode va etesal ba kelid barقarار ast)
     # 3) sabt dar inventory (hata agar deploy naghes bood, kelid nصب shode va etesal ba kelid barقarار ast)
@@ -1062,8 +1067,8 @@ class Handler(BaseHTTPRequestHandler):
         action = str(d.get("action", "")); args = d.get("args", {}) or {}
         if action == "deploy":
             res = deploy_to_server(s)
-            audit_log(self._user(), name, "deploy", "deploy (scp + update.sh)", res.get("rc"))
-            return self._send(200, {"server": name, "cmd": "deploy (scp + update.sh)", **res})
+            audit_log(self._user(), name, "deploy", "github-update (install.sh --update)", res.get("rc"))
+            return self._send(200, {"server": name, "cmd": "github-update (install.sh --update)", **res})
         cmd = build_cmd(s.get("role"), action, args)
         if not cmd:
             return self._send(400, {"error": "unknown or invalid action"})
@@ -1287,7 +1292,7 @@ const DICT={
   upstreams:'serverhaye Iran-e digar (upstream)',add_up:'+ upstream',no_up:'upstream nadari (faghat yek Iran).',status:'status',del_up:'hazf upstream',cf_delup:'hazf upstream',cf_delupsvc:'hazf service az upstream',
 
   cancel:'enseraf',save:'zakhire',fill:'hameye field haye lazem ra por kon',saved:'zakhire shod ✓',
-  cf_delsrv:'hazf server az panel?',cf_delnode:'hazf node',cf_delsvc:'hazf service',cf_deploy:'apdit scripthaye',
+  cf_delsrv:'hazf server az panel?',cf_delnode:'hazf node',cf_delsvc:'hazf service',cf_deploy:'apdit az GitHub (akharin Release) rooye',
   copy_out:'copy khorooji',close:'bastan',copied:'copy shod ✓',loading_det:'dar hal daryaft jozyiat…',
   // form titles/labels
   t_kcp_iran:'roshan kardan KCP (samt Iran)',l_udp:'port UDP (443 = estetar QUIC)',l_profile:'profile',
@@ -1349,7 +1354,7 @@ const DICT={
   upstreams:'Other Iran servers (upstream)',add_up:'+ upstream',no_up:'No upstream (single Iran).',status:'status',del_up:'Remove upstream',cf_delup:'Remove upstream',cf_delupsvc:'Remove service from upstream',
 
   cancel:'Cancel',save:'Save',fill:'Fill all required fields',saved:'Saved ✓',
-  cf_delsrv:'Remove server from panel?',cf_delnode:'Remove node',cf_delsvc:'Remove service',cf_deploy:'Update scripts of',
+  cf_delsrv:'Remove server from panel?',cf_delnode:'Remove node',cf_delsvc:'Remove service',cf_deploy:'Update from GitHub (latest Release) on',
   copy_out:'Copy output',close:'Close',copied:'Copied ✓',loading_det:'Loading details…',
   t_kcp_iran:'Enable KCP (Iran side)',l_udp:'UDP port (443 = QUIC stealth)',l_profile:'Profile',
   t_kcp_node:'Enable KCP (node side)',l_remote:'IP:PORT Iran (UDP)',l_key:'KEY (from "Show node KEY")',

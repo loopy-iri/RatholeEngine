@@ -971,6 +971,28 @@ cmd_migrate(){
   echo "firewall har server Iran:  ufw allow 443/udp"
 }
 
+# beroozresani-e kamel az GitHub (akharin Release): install.sh ra migirad va --update mizanad.
+# install.sh khodesh naghsh (panel/node/hub) ra tashkhis mide va snapshot + health-check + rollback-e khodkar ra ejra mikonad.
+cmd_update(){
+  need_root
+  command -v curl >/dev/null 2>&1 || die "curl lazem ast (apt install -y curl)."
+  local gh="${RATHOLE_GH:-loopy-iri/RatholeEngine}" rel="${RATHOLE_RELEASE:-latest}"
+  local path; if [ "$rel" = "latest" ]; then path="releases/latest/download/install.sh"; else path="releases/download/${rel}/install.sh"; fi
+  local mirrors=("" "https://ghproxy.net/" "https://gh-proxy.com/" "https://mirror.ghproxy.com/")
+  local tmp m ok=0; tmp="$(mktemp)"
+  log "download install.sh az GitHub Release: $gh ($rel)..."
+  for m in "${mirrors[@]}"; do
+    if curl -fSL --retry 2 --connect-timeout 20 "${m}https://github.com/${gh}/${path}" -o "$tmp" 2>/dev/null; then ok=1; break; fi
+    [ -n "$m" ] && warn "in mirror javab nadad, badi..."
+  done
+  [ "$ok" -eq 1 ] || { rm -f "$tmp"; die "download install.sh az hameye mirror-ha shekast khord (filtering/slug/release ra barresi kon)."; }
+  log "ejra-ye update-e kamel (snapshot + health-check + rollback-e khodkar)..."
+  RATHOLE_GH="$gh" RATHOLE_RELEASE="$rel" bash "$tmp" --update
+  local rc=$?
+  rm -f "$tmp"
+  return "$rc"
+}
+
 usage(){ cat <<U
 ratholenode — mdirit klaint rathole (chnd service rooye yek tunnel)
 
@@ -992,6 +1014,7 @@ ratholenode — mdirit klaint rathole (chnd service rooye yek tunnel)
   migrate                        naghshe-ye mohajerat hame tunnelha (main + upstreamha) be kcp
   watchdog <on [interval]|off|status>   restart khodkar tunnel gir-karde/ghat-shode
   backup [file] | restore <file>   backup/restore tanzimat node
+  update                         beroozresani-e kamel az GitHub (akharin Release; snapshot + rollback-e khodkar)
   show                           namayesh tanzimat (tokenha makhfi)
 U
 }
@@ -1017,6 +1040,7 @@ case "${1:-show}" in
   restore) shift; cmd_restore "${1:-}" ;;
   show)    cmd_show ;;
   status)  cmd_status ;;
+  update)  cmd_update ;;
   logs)    shift; cmd_logs "${1:-50}" ;;
   -h|--help|help) usage ;;
   *) err "dstvr nashenakhte: $1"; usage; exit 1 ;;

@@ -73,6 +73,7 @@ ratholectl set domain <new>            # تغییر تنظیمات سراسری
 ratholectl set fake-port 8443          # ... fake-port/sub-port/control-port/nginx-conf/fullchain/key
 ratholectl rm <name>                   # حذف نود
 ratholectl doctor                      # بررسی سلامت
+ratholectl update                      # به‌روزرسانی کامل از GitHub (آخرین Release؛ snapshot + rollback خودکار)
 ratholectl menu                        # منوی تعاملی کامل
 ```
 
@@ -109,6 +110,7 @@ ratholenode add-svc <name> <token> <inbound>   # افزودن سرویس به ه
 ratholenode rm-svc <name>              # حذف سرویس
 ratholenode set SERVER newdomain:443   # تغییر سرور
 ratholenode check                      # بررسی تداخل پورت با nginx نود
+ratholenode update                     # به‌روزرسانی کامل از GitHub (آخرین Release؛ snapshot + rollback خودکار)
 ratholenode status | logs | apply
 ```
 
@@ -250,7 +252,11 @@ curl -fsSL https://raw.githubusercontent.com/loopy-iri/RatholeEngine/main/instal
 
 `update.sh` قبل از هر تغییر یک **snapshot کامل** (CLI + کانفیگ‌ها + یونیت‌های systemd) در `/var/backups/rathole-manager/` می‌گیرد، بعد از آپدیت **health-check** می‌زند (سرویس بالا آمد؟ `nginx -t` سالم؟) و اگر خراب بود **خودکار به snapshot برمی‌گردد**.
 
+> **ساده‌ترین راه از خودِ سرور:** `sudo ratholectl update` (روی ایران) یا `sudo ratholenode update` (روی نود) — `install.sh` آخرین Release را از GitHub (با mirrorهای ghproxy برای دور زدن فیلترینگ) می‌گیرد و همین `update.sh` را با snapshot + rollback اجرا می‌کند. در **هاب** هم دکمه‌ی «آپدیت» هر سرور دقیقاً همین کار را از راه دور انجام می‌دهد (دیگر به bundle محلی هاب وابسته نیست).
+
 ```bash
+sudo ratholectl update                  # روی ایران: آپدیت کامل از GitHub (آخرین Release)
+sudo ratholenode update                 # روی نود:  آپدیت کامل از GitHub (آخرین Release)
 sudo bash update.sh                     # آپدیت با snapshot + health-check + رولبک خودکار
 sudo bash update.sh --list-backups      # لیست snapshotها
 sudo bash update.sh --rollback          # بازگشت به آخرین snapshot

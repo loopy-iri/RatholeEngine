@@ -190,6 +190,11 @@ sudo systemctl enable --now rathole-server
 sudo ratholectl doctor        # بررسی سلامت
 ```
 
+> **آپدیت‌های بعدی:** `sudo ratholectl update` آخرین Release گیت‌هاب را می‌گیرد و آپدیت
+> کامل (snapshot + health-check + rollback خودکار) را اجرا می‌کند. روی نود هم
+> `sudo ratholenode update`. هر دو از mirrorهای ghproxy fallback دارند، پس از داخل
+> ایران کار می‌کنند. دکمه‌ی **آپدیت** هاب هم همین را از راه SSH انجام می‌دهد.
+
 ### ۲.۸ افزودن نود
 
 هر بار که نودی اضافه می‌کنی، `ratholectl` state را عوض و کانفیگ‌ها را بازتولید و hot-reload می‌کند (بدون قطع تونل‌های فعال):
@@ -359,6 +364,7 @@ sudo ratholenode upstream add <id> <server:443>
 sudo ratholenode upstream add-svc <id> <name> <token> <inbound>
 
 sudo ratholenode backup              # بکاپ state نود
+sudo ratholenode update              # آپدیت کامل از GitHub (آخرین Release؛ snapshot + rollback خودکار)
 ```
 
 ---
