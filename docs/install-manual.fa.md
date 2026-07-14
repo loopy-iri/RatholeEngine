@@ -8,7 +8,7 @@
 
 _گام‌به‌گام، بدون اسکریپت خودکار — دقیقاً همان کاری که نصاب‌ها می‌کنند._
 
-[**English README**](../README.md) · [**مرجع کامل CLI**](README.fa.md) · [نصب خودکار](README.fa.md#شروع-سریع)
+[**English version**](install-manual.md) · [**مرجع کامل CLI**](README.fa.md) · [نصب خودکار](README.fa.md#شروع-سریع)
 
 </div>
 

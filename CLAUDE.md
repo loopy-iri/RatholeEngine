@@ -93,7 +93,7 @@ Documentation lives in `docs/` (Persian, except the root README). Diagrams (SVG/
 
 - `README.md` (repo root) — GitHub landing page, **bilingual** (English + Persian summary). Embeds `docs/assets/architecture.svg` and `transport-modes.svg`.
 - `docs/README.fa.md` — full CLI reference and install flows (Persian; was `rathole-manager/README.md`).
-- `docs/install-manual.fa.md` — full **manual** install walkthrough (Persian): Iran panel + Pasargad Xray/user config + foreign nodes + hub, step by step, mirroring exactly what `install-panel.sh`/`install-node.sh`/`install-hub.sh`/`ratholectl init` do.
+- `docs/install-manual.md` / `docs/install-manual.fa.md` — full **manual** install walkthrough (English + Persian): Iran panel + Pasargad Xray/user config + foreign nodes + hub, step by step, mirroring exactly what `install-panel.sh`/`install-node.sh`/`install-hub.sh`/`ratholectl init` do.
 - `docs/architecture.md` — three roles + the state→regenerate→reload principle (embeds `architecture.svg`, `state-regenerate-reload.svg`).
 - `docs/transport-modes.md` — the four transport carriers + game/SNI (embeds `transport-modes.svg`).
 - `docs/traffic-flow.md` — packet path layer-by-layer (Mermaid + `assets/*.svg`; was `TRAFFIC-FLOW.md`).
