@@ -126,6 +126,7 @@ Full CLI reference and install flows (Persian): [`docs/README.fa.md`](docs/READM
 | [`docs/performance.md`](docs/performance.md) | Tuning beyond the tunnel (BBR, kcp profiles, non-tunnel bottlenecks). |
 | [`docs/amneziawg-reverse.md`](docs/amneziawg-reverse.md) | A separate AmneziaWG reverse-tunnel design (not part of the rathole flow). |
 | [`docs/README.fa.md`](docs/README.fa.md) | **Full Persian CLI reference + install/uninstall flows.** |
+| [`docs/install-manual.fa.md`](docs/install-manual.fa.md) | **Full manual install (Persian):** Iran panel + Pasargad config + foreign nodes + hub, step by step. |
 | [`rathole-multilocation-pasargad.md`](rathole-multilocation-pasargad.md) | Original detailed design & troubleshooting doc (Persian). |
 
 ## Repository layout
