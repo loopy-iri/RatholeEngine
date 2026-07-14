@@ -1,4 +1,29 @@
-# rathole-manager
+<div align="center">
+
+<img src="assets/logo.svg" alt="RatholeEngine" width="120" height="120" />
+
+# RatholeEngine
+
+**سیستم تونل معکوس چند-موقعیتی روی rathole + Nginx**
+
+_یک پورت (۴۴۳) · یک دامنه · یک گواهی · مسیریابی نودها با path_
+_ساخته‌شده برای تونل مقاومِ سانسور به داخل ایران._
+
+[![CI](https://github.com/loopy-iri/RatholeEngine/actions/workflows/ci.yml/badge.svg)](https://github.com/loopy-iri/RatholeEngine/actions/workflows/ci.yml)
+[![Release](https://img.shields.io/github/v/release/loopy-iri/RatholeEngine?sort=semver&color=7c3aed)](https://github.com/loopy-iri/RatholeEngine/releases/latest)
+[![Stars](https://img.shields.io/github/stars/loopy-iri/RatholeEngine?style=flat&color=16a34a)](https://github.com/loopy-iri/RatholeEngine/stargazers)
+<br/>
+![shell](https://img.shields.io/badge/shell-bash-4EAA25?logo=gnubash&logoColor=white)
+![python](https://img.shields.io/badge/python-stdlib%20only-3776AB?logo=python&logoColor=white)
+![tunnel](https://img.shields.io/badge/tunnel-rathole%20%2B%20nginx-7c3aed)
+
+[**English**](../README.md) · [**فارسی**](#این-چیست) · [شروع سریع](#شروع-سریع) · [مستندات](../README.md#documentation)
+
+</div>
+
+<div dir="rtl">
+
+## این چیست
 
 مدیریت خودکار تونل ریورس مولتی‌لوکیشن با **rathole + Nginx** روی **یک پورت (۴۴۳) و یک دامنه و یک گواهی**.
 ساخته‌شده برای سناریوی: پنل (ایران) = rathole **server** + nginx، و نودهای خارج = rathole **client**.
@@ -349,3 +374,5 @@ sudo bash uninstall-node.sh --purge --yes
 ```
 
 > `uninstall-panel.sh` اگر فایل `*.rathole-orig.bak` وجود داشته باشد، کانفیگ nginx اصلی‌ات را **برمی‌گرداند**. بکاپ‌های پوشه‌ای تداخل (`/etc/nginx/rathole-backup-*`) دست‌نخورده می‌مانند تا در صورت نیاز دستی برگردانی. گواهی Let's Encrypt هم عمداً حذف نمی‌شود.
+
+</div>
