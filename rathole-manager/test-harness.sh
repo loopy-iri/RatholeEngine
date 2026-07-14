@@ -118,4 +118,18 @@ bash "$RUN" regenerate
 awk '/listen 8880;/{f=1} f&&/proxy_pass http:\/\/127.0.0.1:\$backend_port;/{print "found"; exit}' "$CONF" | grep -q found && echo "OK: plain-only -> backend_port" || echo "FAIL: plain-only regression"
 grep -q 'map .* \$direct_node' "$CONF" && echo "FAIL: map direct baraye plain-only tvlid shod" || echo "OK: bedoon direct, map direct nist"
 
+line "tst 14: cmd_direct on/status/off"
+jq 'del(.direct_port,.direct_header,.plain_port)' "$ROOT/etc/rathole-manager/state.json" > "$ROOT/s.tmp" && mv "$ROOT/s.tmp" "$ROOT/etc/rathole-manager/state.json"
+bash "$RUN" cmd_direct on --port 8081 --header X-Cdn-Id >/dev/null
+GP="$(jq -r '.direct_port' "$ROOT/etc/rathole-manager/state.json")"; GH="$(jq -r '.direct_header' "$ROOT/etc/rathole-manager/state.json")"
+[ "$GP" = "8081" ] && [ "$GH" = "X-Cdn-Id" ] && echo "OK: state direct set shod" || echo "FAIL: state ghalat ($GP/$GH)"
+# stdout ra capture mikonim (pipe be grep -q zir-e pipefail be khatere SIGPIPE 141 midahad).
+DST="$(bash "$RUN" cmd_direct status)"
+echo "$DST" | grep -q 'roshan' && echo "OK: status roshan" || echo "FAIL: status"
+echo "$DST" | grep -q 'trk01 -> "X-Cdn-Id: trk01"' && echo "OK: per-node header dar status" || echo "FAIL: per-node header nist"
+bash "$RUN" cmd_direct on --port 443 2>/dev/null && echo "FAIL: port 443 ghabool shod" || echo "OK: port 443 rad shod"
+bash "$RUN" cmd_direct on --header 'bad;header' 2>/dev/null && echo "FAIL: header ghalat ghabool shod" || echo "OK: header ghalat rad shod"
+bash "$RUN" cmd_direct off >/dev/null
+jq -e '.direct_port // empty' "$ROOT/etc/rathole-manager/state.json" >/dev/null 2>&1 && echo "FAIL: direct_port baad az off munde" || echo "OK: off pak kard"
+
 echo "SANDBOX=$ROOT"
