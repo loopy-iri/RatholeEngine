@@ -1,0 +1,33 @@
+# ---- اسرار و گواهی‌ها (هرگز نباید در source control باشند) ----
+*.pem
+*.key
+*.crt
+fullchain.pem
+privkey.pem
+/etc/ratholehub/config.json
+
+# ---- بکاپ‌ها و آرشیوها ----
+*.tar.gz
+*.zip
+rathole-node-backup-*.tar.gz
+rathole-manager.zip
+
+# ---- state و کانفیگ محلی ----
+state.json
+inventory.json
+node.env
+services.conf
+
+# ---- فایل‌های موقتِ توسعه ----
+_patch_*.py
+_smoke_*.py
+_syntax_check.sh
+__pycache__/
+*.pyc
+*.tmp
+
+# ---- ابزارها و اسکرچ محلی (نباید در repo باشند) ----
+.claude/
+_finalize.py
+scratch_confirmed.txt
+opencode.json

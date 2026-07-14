@@ -1,0 +1,157 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1160 1180" font-family="Segoe UI, Arial, sans-serif">
+  <defs>
+    <marker id="arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#334155"/>
+    </marker>
+    <marker id="arrU" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#9333ea"/>
+    </marker>
+  </defs>
+
+  <rect x="0" y="0" width="1160" height="1180" fill="#ffffff"/>
+
+  <!-- title banner -->
+  <rect x="20" y="16" width="1120" height="46" rx="8" fill="#0f172a"/>
+  <text x="580" y="39" text-anchor="middle" fill="#ffffff" font-size="19" font-weight="bold">Transport Modes — same tunnel, four carriers (+ game/SNI)</text>
+  <text x="580" y="55" text-anchor="middle" fill="#cbd5e1" font-size="12.5">Services, tokens and user paths never change — only the transport that carries the tunnel does.</text>
+
+  <!-- column headers -->
+  <text x="150" y="88" text-anchor="middle" font-size="12.5" font-weight="bold" fill="#475569">FOREIGN NODE (rathole client)</text>
+  <text x="580" y="88" text-anchor="middle" font-size="12.5" font-weight="bold" fill="#475569">CARRIER / IRAN ENTRY</text>
+  <text x="1000" y="88" text-anchor="middle" font-size="12.5" font-weight="bold" fill="#475569">TLS TERMINATION</text>
+
+  <!-- ======================= MODE 1: websocket + TLS (default) ======================= -->
+  <rect x="20" y="100" width="1120" height="170" rx="12" fill="#f8fafc" stroke="#94a3b8" stroke-width="1.5"/>
+  <rect x="34" y="112" width="150" height="30" rx="6" fill="#0f172a"/>
+  <text x="109" y="132" text-anchor="middle" font-size="13" font-weight="bold" fill="#ffffff">1 · websocket + TLS</text>
+  <text x="200" y="132" font-size="12" fill="#16a34a" font-weight="bold">DEFAULT</text>
+
+  <rect x="40" y="158" width="220" height="86" rx="8" fill="#ecfdf5" stroke="#059669" stroke-width="1.5"/>
+  <text x="150" y="184" text-anchor="middle" font-size="12.5" font-weight="bold" fill="#065f46">rathole client (node)</text>
+  <text x="150" y="204" text-anchor="middle" font-size="11" fill="#166534">connects out: wss://domain:443</text>
+  <text x="150" y="222" text-anchor="middle" font-size="11" fill="#166534">tls = true (to nginx)</text>
+
+  <rect x="470" y="158" width="240" height="86" rx="8" fill="#e0f2fe" stroke="#0284c7" stroke-width="1.5"/>
+  <text x="590" y="184" text-anchor="middle" font-size="12.5" font-weight="bold" fill="#075985">nginx :443 (TCP)</text>
+  <text x="590" y="204" text-anchor="middle" font-size="11" fill="#0c4a6e">$http_upgrade splits root /</text>
+  <text x="590" y="222" text-anchor="middle" font-size="11" fill="#0c4a6e">ws → rathole control :2333</text>
+
+  <rect x="900" y="158" width="220" height="86" rx="8" fill="#e0f2fe" stroke="#0284c7" stroke-width="1.5"/>
+  <text x="1010" y="188" text-anchor="middle" font-size="12.5" font-weight="bold" fill="#075985">nginx (Iran)</text>
+  <text x="1010" y="210" text-anchor="middle" font-size="11" fill="#0c4a6e">Let's Encrypt cert</text>
+
+  <line x1="260" y1="201" x2="466" y2="201" stroke="#334155" stroke-width="2.2" marker-end="url(#arr)"/>
+  <line x1="710" y1="201" x2="896" y2="201" stroke="#334155" stroke-width="2.2" marker-end="url(#arr)"/>
+
+  <!-- ======================= MODE 2: kcp (UDP+FEC) ======================= -->
+  <rect x="20" y="286" width="1120" height="180" rx="12" fill="#f8fafc" stroke="#94a3b8" stroke-width="1.5"/>
+  <rect x="34" y="298" width="150" height="30" rx="6" fill="#7c3aed"/>
+  <text x="109" y="318" text-anchor="middle" font-size="13" font-weight="bold" fill="#ffffff">2 · kcp (UDP+FEC)</text>
+  <text x="200" y="318" font-size="11.5" fill="#7c3aed" font-weight="bold">additive · parallel path for lossy links</text>
+
+  <rect x="40" y="344" width="220" height="96" rx="8" fill="#ecfdf5" stroke="#059669" stroke-width="1.5"/>
+  <text x="150" y="370" text-anchor="middle" font-size="12.5" font-weight="bold" fill="#065f46">node + kcptun-client</text>
+  <text x="150" y="390" text-anchor="middle" font-size="11" fill="#166534">local :29901.. → UDP</text>
+  <text x="150" y="408" text-anchor="middle" font-size="11" fill="#166534">rathole → 127.0.0.1 kcp</text>
+  <text x="150" y="426" text-anchor="middle" font-size="10.5" fill="#166534">profile: balanced/lossy/aggressive</text>
+
+  <rect x="470" y="344" width="240" height="96" rx="8" fill="#ede9fe" stroke="#7c3aed" stroke-width="1.5"/>
+  <text x="590" y="370" text-anchor="middle" font-size="12.5" font-weight="bold" fill="#5b21b6">kcptun-server (Iran)</text>
+  <text x="590" y="390" text-anchor="middle" font-size="11" fill="#4c1d95">UDP :443 (looks like QUIC)</text>
+  <text x="590" y="408" text-anchor="middle" font-size="11" fill="#4c1d95">→ forwards to control :2333</text>
+  <text x="590" y="426" text-anchor="middle" font-size="10.5" fill="#4c1d95">does NOT touch nginx/443/TCP</text>
+
+  <rect x="900" y="344" width="220" height="96" rx="8" fill="#fef2f2" stroke="#dc2626" stroke-width="1.5"/>
+  <text x="1010" y="382" text-anchor="middle" font-size="12" font-weight="bold" fill="#991b1b">none on carrier</text>
+  <text x="1010" y="404" text-anchor="middle" font-size="10.5" fill="#991b1b">FEC only; rathole ws still</text>
+  <text x="1010" y="420" text-anchor="middle" font-size="10.5" fill="#991b1b">terminates tls at nginx inside</text>
+
+  <line x1="260" y1="392" x2="466" y2="392" stroke="#9333ea" stroke-width="2.4" stroke-dasharray="7 5" marker-end="url(#arrU)"/>
+  <text x="363" y="382" text-anchor="middle" font-size="10.5" fill="#7c3aed">UDP + FEC</text>
+  <line x1="710" y1="392" x2="896" y2="392" stroke="#334155" stroke-width="2.2" marker-end="url(#arr)"/>
+
+  <!-- ======================= MODE 3: plain (ws, no TLS) ======================= -->
+  <rect x="20" y="482" width="1120" height="170" rx="12" fill="#f8fafc" stroke="#94a3b8" stroke-width="1.5"/>
+  <rect x="34" y="494" width="150" height="30" rx="6" fill="#0891b2"/>
+  <text x="109" y="514" text-anchor="middle" font-size="13" font-weight="bold" fill="#ffffff">3 · plain (no TLS)</text>
+  <text x="200" y="514" font-size="11.5" fill="#0e7490" font-weight="bold">lighter · unencrypted tunnel path</text>
+
+  <rect x="40" y="540" width="220" height="86" rx="8" fill="#ecfdf5" stroke="#059669" stroke-width="1.5"/>
+  <text x="150" y="566" text-anchor="middle" font-size="12.5" font-weight="bold" fill="#065f46">rathole client (node)</text>
+  <text x="150" y="586" text-anchor="middle" font-size="11" fill="#166534">ws:// (no TLS)</text>
+  <text x="150" y="604" text-anchor="middle" font-size="11" fill="#166534">→ Iran :8880</text>
+
+  <rect x="470" y="540" width="240" height="86" rx="8" fill="#cffafe" stroke="#0891b2" stroke-width="1.5"/>
+  <text x="590" y="566" text-anchor="middle" font-size="12.5" font-weight="bold" fill="#155e75">nginx HTTP :8880</text>
+  <text x="590" y="586" text-anchor="middle" font-size="11" fill="#0e7490">separate no-TLS listener</text>
+  <text x="590" y="604" text-anchor="middle" font-size="11" fill="#0e7490">ws → control :2333</text>
+
+  <rect x="900" y="540" width="220" height="86" rx="8" fill="#fef2f2" stroke="#dc2626" stroke-width="1.5"/>
+  <text x="1010" y="576" text-anchor="middle" font-size="12" font-weight="bold" fill="#991b1b">none</text>
+  <text x="1010" y="598" text-anchor="middle" font-size="10.5" fill="#991b1b">no encryption on this path</text>
+
+  <line x1="260" y1="583" x2="466" y2="583" stroke="#334155" stroke-width="2.2" marker-end="url(#arr)"/>
+  <line x1="710" y1="583" x2="896" y2="583" stroke="#334155" stroke-width="2.2" marker-end="url(#arr)"/>
+
+  <!-- ======================= MODE 4: noise ======================= -->
+  <rect x="20" y="668" width="1120" height="180" rx="12" fill="#f8fafc" stroke="#94a3b8" stroke-width="1.5"/>
+  <rect x="34" y="680" width="150" height="30" rx="6" fill="#b45309"/>
+  <text x="109" y="700" text-anchor="middle" font-size="13" font-weight="bold" fill="#ffffff">4 · noise</text>
+  <text x="200" y="700" font-size="11.5" fill="#b45309" font-weight="bold">encrypted transport · no TLS/cert · second rathole instance</text>
+
+  <rect x="40" y="726" width="220" height="96" rx="8" fill="#ecfdf5" stroke="#059669" stroke-width="1.5"/>
+  <text x="150" y="752" text-anchor="middle" font-size="12.5" font-weight="bold" fill="#065f46">rathole client (node)</text>
+  <text x="150" y="772" text-anchor="middle" font-size="11" fill="#166534">Noise (X25519) transport</text>
+  <text x="150" y="790" text-anchor="middle" font-size="11" fill="#166534">has server public key</text>
+  <text x="150" y="808" text-anchor="middle" font-size="10.5" fill="#166534">→ Iran :2334 (TCP, public)</text>
+
+  <rect x="470" y="726" width="240" height="96" rx="8" fill="#fffbeb" stroke="#d97706" stroke-width="1.5"/>
+  <text x="590" y="752" text-anchor="middle" font-size="12.5" font-weight="bold" fill="#92400e">rathole-noise :2334</text>
+  <text x="590" y="772" text-anchor="middle" font-size="11" fill="#78350f">2nd instance, public port</text>
+  <text x="590" y="790" text-anchor="middle" font-size="11" fill="#78350f">private key stays on Iran</text>
+  <text x="590" y="808" text-anchor="middle" font-size="10.5" fill="#78350f">separate noise-server.toml</text>
+
+  <rect x="900" y="726" width="220" height="96" rx="8" fill="#f0fdf4" stroke="#16a34a" stroke-width="1.5"/>
+  <text x="1010" y="764" text-anchor="middle" font-size="12" font-weight="bold" fill="#14532d">Noise handshake</text>
+  <text x="1010" y="786" text-anchor="middle" font-size="10.5" fill="#166534">encryption without X.509</text>
+  <text x="1010" y="802" text-anchor="middle" font-size="10.5" fill="#166534">no nginx in this path</text>
+
+  <line x1="260" y1="774" x2="466" y2="774" stroke="#9333ea" stroke-width="2.4" stroke-dasharray="7 5" marker-end="url(#arrU)"/>
+  <text x="363" y="764" text-anchor="middle" font-size="10.5" fill="#7c3aed">encrypted</text>
+  <line x1="710" y1="774" x2="896" y2="774" stroke="#334155" stroke-width="2.2" marker-end="url(#arr)"/>
+
+  <!-- ======================= MODE 5: game / SNI ======================= -->
+  <rect x="20" y="864" width="1120" height="192" rx="12" fill="#f8fafc" stroke="#94a3b8" stroke-width="1.5"/>
+  <rect x="34" y="876" width="150" height="30" rx="6" fill="#be123c"/>
+  <text x="109" y="896" text-anchor="middle" font-size="13" font-weight="bold" fill="#ffffff">5 · game / SNI</text>
+  <text x="200" y="896" font-size="11.5" fill="#be123c" font-weight="bold">L4 passthrough · TLS terminates on the NODE (VLESS+TLS+Vision)</text>
+
+  <rect x="40" y="922" width="220" height="110" rx="8" fill="#ecfdf5" stroke="#059669" stroke-width="1.5"/>
+  <text x="150" y="948" text-anchor="middle" font-size="12.5" font-weight="bold" fill="#065f46">node — real cert</text>
+  <text x="150" y="968" text-anchor="middle" font-size="11" fill="#166534">Xray VLESS+TLS+Vision</text>
+  <text x="150" y="986" text-anchor="middle" font-size="11" fill="#166534">cert for the SNI on node</text>
+  <text x="150" y="1006" text-anchor="middle" font-size="10.5" fill="#166534">data still via reverse tunnel</text>
+
+  <rect x="470" y="922" width="240" height="110" rx="8" fill="#fce7f3" stroke="#db2777" stroke-width="1.5"/>
+  <text x="590" y="948" text-anchor="middle" font-size="12.5" font-weight="bold" fill="#9d174d">nginx stream :443</text>
+  <text x="590" y="968" text-anchor="middle" font-size="11" fill="#831843">ssl_preread → SNI map</text>
+  <text x="590" y="986" text-anchor="middle" font-size="11" fill="#831843">L7/WS vhost moves to :8443</text>
+  <text x="590" y="1006" text-anchor="middle" font-size="10.5" fill="#831843">(internal_port)</text>
+
+  <rect x="900" y="922" width="220" height="110" rx="8" fill="#f0fdf4" stroke="#16a34a" stroke-width="1.5"/>
+  <text x="1010" y="964" text-anchor="middle" font-size="12" font-weight="bold" fill="#14532d">on the NODE</text>
+  <text x="1010" y="986" text-anchor="middle" font-size="10.5" fill="#166534">Iran only passes bytes</text>
+  <text x="1010" y="1004" text-anchor="middle" font-size="10.5" fill="#166534">(no decryption on Iran)</text>
+
+  <line x1="260" y1="977" x2="466" y2="977" stroke="#334155" stroke-width="2.2" marker-end="url(#arr)"/>
+  <line x1="710" y1="977" x2="896" y2="977" stroke="#334155" stroke-width="2.2" marker-end="url(#arr)"/>
+
+  <!-- footer / legend -->
+  <text x="34" y="1096" font-size="12" font-weight="bold" fill="#0f172a">Invariant:</text>
+  <text x="110" y="1096" font-size="12" fill="#334155">TLS is terminated only by nginx (rathole server transport is always tls=false). Modes 1–4 keep user services/tokens/paths identical.</text>
+  <line x1="34" y1="1120" x2="74" y2="1120" stroke="#334155" stroke-width="2.2" marker-end="url(#arr)"/>
+  <text x="82" y="1124" font-size="11.5" fill="#475569">data path</text>
+  <line x1="190" y1="1120" x2="230" y2="1120" stroke="#9333ea" stroke-width="2.4" stroke-dasharray="7 5"/>
+  <text x="238" y="1124" font-size="11.5" fill="#475569">encrypted/obfuscated carrier (node → Iran)</text>
+  <text x="34" y="1150" font-size="11.5" fill="#64748b">Default ports: control 2333 · plain 8880 · noise 2334 · game internal 8443 · kcp UDP 443. All overridable.</text>
+</svg>

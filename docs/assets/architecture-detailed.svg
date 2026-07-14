@@ -1,0 +1,209 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1640 1250" font-family="Segoe UI, Arial, sans-serif">
+  <defs>
+    <marker id="d" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#334155"/></marker>
+    <marker id="bl" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#1d4ed8"/></marker>
+    <marker id="pu" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#9333ea"/></marker>
+    <marker id="gr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#15803d"/></marker>
+    <marker id="or" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#c2410c"/></marker>
+  </defs>
+  <rect x="0" y="0" width="1640" height="1250" fill="#ffffff"/>
+
+  <!-- ===== TITLE ===== -->
+  <rect x="20" y="14" width="1600" height="58" rx="10" fill="#0f172a"/>
+  <text x="820" y="42" text-anchor="middle" fill="#ffffff" font-size="22" font-weight="bold">Multi-location Reverse Tunnel — Full Reference</text>
+  <text x="820" y="63" text-anchor="middle" fill="#cbd5e1" font-size="14">rathole + Nginx + Pasargad (Xray)  ·  one port (443), one domain, one Let's Encrypt cert</text>
+
+  <!-- ===== BAND 1: TOPOLOGY ===== -->
+  <text x="30" y="100" font-size="15" font-weight="bold" fill="#0f172a">1) Topology &amp; data path</text>
+
+  <!-- Users -->
+  <rect x="30" y="180" width="175" height="150" rx="10" fill="#dbeafe" stroke="#3b82f6" stroke-width="2"/>
+  <text x="117" y="212" text-anchor="middle" font-size="15" font-weight="bold" fill="#1e3a8a">Users (Iran)</text>
+  <text x="117" y="236" text-anchor="middle" font-size="11.5" fill="#1e40af">Xray client</text>
+  <text x="117" y="256" text-anchor="middle" font-size="11.5" fill="#1e40af">VLESS + WS</text>
+  <text x="117" y="276" text-anchor="middle" font-size="11.5" fill="#1e40af">addr = panel.example.ir</text>
+  <text x="117" y="296" text-anchor="middle" font-size="11.5" fill="#1e40af">:443 · path = /trk01</text>
+  <text x="117" y="316" text-anchor="middle" font-size="11.5" fill="#1e40af">TLS = on</text>
+
+  <!-- Iran server -->
+  <rect x="255" y="115" width="615" height="430" rx="12" fill="#fffbeb" stroke="#d97706" stroke-width="2.5"/>
+  <text x="562" y="138" text-anchor="middle" font-size="15" font-weight="bold" fill="#92400e">Iran Server — panel.example.ir  (public IP)</text>
+
+  <!-- nginx -->
+  <rect x="278" y="150" width="565" height="150" rx="9" fill="#e0f2fe" stroke="#0284c7" stroke-width="2"/>
+  <text x="560" y="173" text-anchor="middle" font-size="14" font-weight="bold" fill="#075985">Nginx :443  —  TLS termination (Let's Encrypt)</text>
+  <text x="295" y="198" font-size="11.5" fill="#0c4a6e">location = /  →  map $http_upgrade:</text>
+  <text x="320" y="216" font-size="11.5" fill="#0c4a6e">• websocket  →  rathole control :2333</text>
+  <text x="320" y="233" font-size="11.5" fill="#0c4a6e">• else (browser)  →  fake site / panel :8080</text>
+  <text x="295" y="256" font-size="11.5" fill="#0c4a6e">location /  →  map $uri → backend port:</text>
+  <text x="320" y="273" font-size="11.5" fill="#0c4a6e">/sub/→2096 · /trk01→1001 · /nld01→1002 · /usa01→1003</text>
+  <text x="295" y="292" font-size="10.5" fill="#0369a1">proxy_http_version 1.1 · Upgrade/Connection passthrough · read_timeout 86400s</text>
+
+  <!-- panel/fake -->
+  <rect x="278" y="320" width="262" height="205" rx="9" fill="#fce7f3" stroke="#db2777" stroke-width="2"/>
+  <text x="409" y="345" text-anchor="middle" font-size="13.5" font-weight="bold" fill="#9d174d">Pasargad Panel</text>
+  <text x="409" y="366" text-anchor="middle" font-size="11.5" fill="#831843">+ fake camouflage site</text>
+  <text x="409" y="386" text-anchor="middle" font-size="11.5" fill="#831843">127.0.0.1:8080 (local)</text>
+  <text x="409" y="412" text-anchor="middle" font-size="11" fill="#831843">connects locally to node</text>
+  <text x="409" y="430" text-anchor="middle" font-size="11" fill="#831843">APIs via 127.0.0.1:70xx</text>
+  <text x="409" y="456" text-anchor="middle" font-size="10.5" fill="#9d174d">(served on a subpath,</text>
+  <text x="409" y="472" text-anchor="middle" font-size="10.5" fill="#9d174d">not exact root /)</text>
+
+  <!-- rathole server -->
+  <rect x="558" y="320" width="285" height="205" rx="9" fill="#ede9fe" stroke="#7c3aed" stroke-width="2"/>
+  <text x="700" y="345" text-anchor="middle" font-size="13.5" font-weight="bold" fill="#5b21b6">rathole server</text>
+  <text x="700" y="365" text-anchor="middle" font-size="11" fill="#4c1d95">transport: websocket, tls=false</text>
+  <text x="575" y="392" font-size="11.5" fill="#4c1d95">control  127.0.0.1:2333</text>
+  <text x="575" y="414" font-size="11.5" fill="#4c1d95">data   trk01 → :1001</text>
+  <text x="575" y="432" font-size="11.5" fill="#4c1d95">       nld01 → :1002</text>
+  <text x="575" y="450" font-size="11.5" fill="#4c1d95">       usa01 → :1003</text>
+  <text x="575" y="472" font-size="11.5" fill="#4c1d95">api    trk01 → :7001 ...</text>
+  <text x="700" y="500" text-anchor="middle" font-size="10.5" fill="#5b21b6">token-authenticated per service</text>
+
+  <!-- Foreign nodes -->
+  <rect x="905" y="115" width="585" height="430" rx="12" fill="#ecfdf5" stroke="#059669" stroke-width="2.5"/>
+  <text x="1197" y="138" text-anchor="middle" font-size="15" font-weight="bold" fill="#065f46">Foreign Nodes  —  rathole client = outbound only (no public port)</text>
+
+  <rect x="928" y="150" width="540" height="160" rx="9" fill="#dcfce7" stroke="#16a34a" stroke-width="2"/>
+  <text x="1198" y="173" text-anchor="middle" font-size="13.5" font-weight="bold" fill="#14532d">Node trk01</text>
+  <text x="948" y="198" font-size="11.5" fill="#166534">rathole client (connects to panel.example.ir:443)</text>
+  <text x="948" y="222" font-size="11.5" fill="#166534">data svc  → 127.0.0.1:2087  (Xray ws inbound, path /trk01, TLS off)</text>
+  <text x="948" y="246" font-size="11.5" fill="#166534">api  svc  → 127.0.0.1:62050 (Pasargad-node API)</text>
+  <text x="948" y="272" font-size="11" fill="#14532d">Xray opens VLESS here and routes to the real destination →</text>
+  <text x="948" y="292" font-size="11" fill="#14532d">inbound: VLESS + WebSocket (or HTTPUpgrade). NOT Reality.</text>
+
+  <rect x="928" y="325" width="540" height="95" rx="9" fill="#dcfce7" stroke="#16a34a" stroke-width="1.6"/>
+  <text x="1198" y="348" text-anchor="middle" font-size="13" font-weight="bold" fill="#14532d">Node nld01</text>
+  <text x="1198" y="370" text-anchor="middle" font-size="11.5" fill="#166534">data → :1002 · path /nld01 · Xray ws inbound 127.0.0.1:2087</text>
+  <text x="1198" y="392" text-anchor="middle" font-size="11" fill="#166534">(reverse tunnel client, outbound only)</text>
+
+  <rect x="928" y="435" width="540" height="95" rx="9" fill="#dcfce7" stroke="#16a34a" stroke-width="1.6"/>
+  <text x="1198" y="458" text-anchor="middle" font-size="13" font-weight="bold" fill="#14532d">Node usa01</text>
+  <text x="1198" y="480" text-anchor="middle" font-size="11.5" fill="#166534">data → :1003 · path /usa01 · Xray ws inbound 127.0.0.1:2087</text>
+  <text x="1198" y="502" text-anchor="middle" font-size="11" fill="#166534">(reverse tunnel client, outbound only)</text>
+
+  <!-- Internet -->
+  <rect x="1525" y="280" width="95" height="150" rx="10" fill="#f1f5f9" stroke="#64748b" stroke-width="2"/>
+  <text x="1572" y="345" text-anchor="middle" font-size="13" font-weight="bold" fill="#334155">Open</text>
+  <text x="1572" y="365" text-anchor="middle" font-size="13" font-weight="bold" fill="#334155">Internet</text>
+
+  <!-- arrows topology -->
+  <line x1="205" y1="225" x2="276" y2="205" stroke="#1d4ed8" stroke-width="2.4" marker-end="url(#bl)"/>
+  <text x="240" y="170" text-anchor="middle" font-size="11" font-weight="bold" fill="#1d4ed8">1 · TLS/WSS :443</text>
+
+  <!-- nginx to panel (root no upgrade) -->
+  <line x1="360" y1="300" x2="360" y2="318" stroke="#db2777" stroke-width="2" marker-end="url(#or)"/>
+  <text x="360" y="313" text-anchor="middle" font-size="9" fill="#9d174d"> </text>
+  <!-- nginx to rathole data -->
+  <line x1="700" y1="300" x2="700" y2="318" stroke="#7c3aed" stroke-width="2.2" marker-end="url(#pu)"/>
+  <text x="745" y="313" text-anchor="middle" font-size="9.5" fill="#5b21b6">2·map→100x</text>
+
+  <!-- tunnel control + data: rathole <-> nodes -->
+  <line x1="843" y1="400" x2="926" y2="230" stroke="#9333ea" stroke-width="2.8" stroke-dasharray="8 5" marker-start="url(#pu)" marker-end="url(#pu)"/>
+  <text x="884" y="300" text-anchor="middle" font-size="10.5" font-weight="bold" fill="#7c3aed">0+3 tunnel</text>
+  <text x="884" y="315" text-anchor="middle" font-size="9.5" fill="#7c3aed">control+data</text>
+  <text x="884" y="330" text-anchor="middle" font-size="9.5" fill="#7c3aed">one wss/443</text>
+
+  <!-- management channel -->
+  <line x1="843" y1="470" x2="926" y2="380" stroke="#c2410c" stroke-width="2.2" stroke-dasharray="4 4" marker-start="url(#or)" marker-end="url(#or)"/>
+  <text x="892" y="455" text-anchor="middle" font-size="9.5" font-weight="bold" fill="#c2410c">mgmt 7001↔62050</text>
+
+  <!-- node xray -> internet -->
+  <line x1="1468" y1="230" x2="1523" y2="320" stroke="#15803d" stroke-width="2.6" marker-end="url(#gr)"/>
+  <text x="1505" y="250" text-anchor="middle" font-size="10.5" font-weight="bold" fill="#15803d">4·exit</text>
+
+  <!-- ===== BAND 2: routing logic + encapsulation ===== -->
+  <text x="30" y="600" font-size="15" font-weight="bold" fill="#0f172a">2) Nginx routing decision (why fake site and rathole never collide)</text>
+
+  <rect x="30" y="615" width="780" height="300" rx="10" fill="#f8fafc" stroke="#94a3b8" stroke-width="1.5"/>
+  <rect x="300" y="630" width="240" height="40" rx="6" fill="#e0f2fe" stroke="#0284c7"/>
+  <text x="420" y="655" text-anchor="middle" font-size="12" fill="#075985">Request arrives on :443 (TLS)</text>
+
+  <rect x="300" y="700" width="240" height="44" rx="6" fill="#fef9c3" stroke="#ca8a04"/>
+  <text x="420" y="720" text-anchor="middle" font-size="12" fill="#854d0e">Is the path EXACTLY "/" ?</text>
+  <text x="420" y="737" text-anchor="middle" font-size="10.5" fill="#854d0e">(location = /  vs  location /)</text>
+  <line x1="420" y1="670" x2="420" y2="698" stroke="#334155" stroke-width="1.8" marker-end="url(#d)"/>
+
+  <!-- yes branch -->
+  <rect x="120" y="780" width="250" height="46" rx="6" fill="#fef9c3" stroke="#ca8a04"/>
+  <text x="245" y="800" text-anchor="middle" font-size="11.5" fill="#854d0e">YES → has Upgrade: websocket ?</text>
+  <text x="245" y="817" text-anchor="middle" font-size="10.5" fill="#854d0e">map $http_upgrade</text>
+  <line x1="380" y1="744" x2="300" y2="778" stroke="#334155" stroke-width="1.6" marker-end="url(#d)"/>
+  <text x="300" y="765" font-size="10" fill="#64748b">yes</text>
+
+  <rect x="60" y="858" width="180" height="42" rx="6" fill="#ede9fe" stroke="#7c3aed"/>
+  <text x="150" y="883" text-anchor="middle" font-size="11.5" fill="#5b21b6">rathole control :2333</text>
+  <line x1="200" y1="826" x2="160" y2="856" stroke="#9333ea" stroke-width="1.8" marker-end="url(#pu)"/>
+  <text x="150" y="845" font-size="9.5" fill="#7c3aed">ws</text>
+
+  <rect x="270" y="858" width="190" height="42" rx="6" fill="#fce7f3" stroke="#db2777"/>
+  <text x="365" y="883" text-anchor="middle" font-size="11.5" fill="#9d174d">fake site / panel :8080</text>
+  <line x1="290" y1="826" x2="340" y2="856" stroke="#db2777" stroke-width="1.8" marker-end="url(#or)"/>
+  <text x="330" y="845" font-size="9.5" fill="#9d174d">no upgrade</text>
+
+  <!-- no branch -->
+  <rect x="500" y="780" width="290" height="46" rx="6" fill="#fef9c3" stroke="#ca8a04"/>
+  <text x="645" y="800" text-anchor="middle" font-size="11.5" fill="#854d0e">NO → map $uri → backend port</text>
+  <text x="645" y="817" text-anchor="middle" font-size="10.5" fill="#854d0e">/sub/→2096 · /&lt;node&gt;→100x</text>
+  <line x1="460" y1="744" x2="600" y2="778" stroke="#334155" stroke-width="1.6" marker-end="url(#d)"/>
+  <text x="540" y="765" font-size="10" fill="#64748b">no</text>
+
+  <rect x="520" y="858" width="250" height="42" rx="6" fill="#ede9fe" stroke="#7c3aed"/>
+  <text x="645" y="883" text-anchor="middle" font-size="11" fill="#5b21b6">rathole data :100x → tunnel → node Xray</text>
+  <line x1="645" y1="826" x2="645" y2="856" stroke="#9333ea" stroke-width="1.8" marker-end="url(#pu)"/>
+
+  <!-- Encapsulation -->
+  <text x="830" y="600" font-size="15" font-weight="bold" fill="#0f172a">3) Encapsulation (who opens what)</text>
+  <rect x="830" y="615" width="780" height="300" rx="10" fill="#f8fafc" stroke="#94a3b8" stroke-width="1.5"/>
+
+  <rect x="860" y="650" width="720" height="220" rx="8" fill="#e0f2fe" stroke="#0284c7" stroke-width="2"/>
+  <text x="878" y="672" font-size="12" font-weight="bold" fill="#075985">TLS (443, Let's Encrypt)  —  terminated by Nginx</text>
+  <rect x="890" y="685" width="660" height="170" rx="7" fill="#ede9fe" stroke="#7c3aed" stroke-width="2"/>
+  <text x="908" y="707" font-size="12" font-weight="bold" fill="#5b21b6">WebSocket (path /trk01)  —  routed by Nginx, piped by rathole</text>
+  <rect x="920" y="720" width="600" height="120" rx="7" fill="#dcfce7" stroke="#16a34a" stroke-width="2"/>
+  <text x="938" y="742" font-size="12" font-weight="bold" fill="#14532d">VLESS  —  opened ONLY by Xray on the node</text>
+  <rect x="950" y="755" width="540" height="70" rx="7" fill="#fef3c7" stroke="#d97706" stroke-width="2"/>
+  <text x="1220" y="785" text-anchor="middle" font-size="12.5" font-weight="bold" fill="#92400e">Real user traffic (e.g. HTTPS to google.com)</text>
+  <text x="1220" y="808" text-anchor="middle" font-size="10.5" fill="#92400e">Nginx &amp; rathole never decrypt this — only node Xray does</text>
+
+  <!-- ===== BAND 3: port table + flows ===== -->
+  <text x="30" y="950" font-size="15" font-weight="bold" fill="#0f172a">4) Port map</text>
+  <rect x="30" y="965" width="780" height="255" rx="10" fill="#ffffff" stroke="#94a3b8" stroke-width="1.5"/>
+  <line x1="30" y1="995" x2="810" y2="995" stroke="#cbd5e1"/>
+  <text x="45" y="986" font-size="11.5" font-weight="bold" fill="#0f172a">Host</text>
+  <text x="250" y="986" font-size="11.5" font-weight="bold" fill="#0f172a">Listener</text>
+  <text x="470" y="986" font-size="11.5" font-weight="bold" fill="#0f172a">Public?</text>
+  <text x="560" y="986" font-size="11.5" font-weight="bold" fill="#0f172a">Purpose</text>
+  <g font-size="11" fill="#334155">
+    <text x="45" y="1018">Iran : 443</text><text x="250" y="1018">nginx</text><text x="470" y="1018" fill="#b91c1c">YES</text><text x="560" y="1018">TLS + path routing (only public port)</text>
+    <text x="45" y="1042">Iran : 127.0.0.1:8080</text><text x="250" y="1042">panel/fake</text><text x="470" y="1042" fill="#15803d">no</text><text x="560" y="1042">root without Upgrade</text>
+    <text x="45" y="1066">Iran : 127.0.0.1:2333</text><text x="250" y="1066">rathole control</text><text x="470" y="1066" fill="#15803d">no</text><text x="560" y="1066">root + websocket (node connects)</text>
+    <text x="45" y="1090">Iran : 127.0.0.1:1001+</text><text x="250" y="1090">rathole data</text><text x="470" y="1090" fill="#15803d">no</text><text x="560" y="1090">/&lt;node&gt; user traffic</text>
+    <text x="45" y="1114">Iran : 127.0.0.1:7001+</text><text x="250" y="1114">rathole api</text><text x="470" y="1114" fill="#15803d">no</text><text x="560" y="1114">panel ↔ node management</text>
+    <text x="45" y="1138">Node : 127.0.0.1:2087</text><text x="250" y="1138">Xray inbound</text><text x="470" y="1138" fill="#15803d">no</text><text x="560" y="1138">tunnel data destination (ws)</text>
+    <text x="45" y="1162">Node : 127.0.0.1:62050</text><text x="250" y="1162">Pasargad API</text><text x="470" y="1162" fill="#15803d">no</text><text x="560" y="1162">tunnel mgmt destination</text>
+  </g>
+  <text x="45" y="1195" font-size="10.5" fill="#64748b">All local listeners bind 127.0.0.1. On nodes the rathole client only makes outbound connections → never collides with the node's own Nginx.</text>
+
+  <!-- flows + alignment -->
+  <text x="830" y="950" font-size="15" font-weight="bold" fill="#0f172a">5) Three flows &amp; path alignment</text>
+  <rect x="830" y="965" width="780" height="255" rx="10" fill="#ffffff" stroke="#94a3b8" stroke-width="1.5"/>
+
+  <line x1="850" y1="990" x2="895" y2="990" stroke="#9333ea" stroke-width="2.8" stroke-dasharray="8 5"/>
+  <text x="905" y="994" font-size="11.5" fill="#334155"><tspan font-weight="bold">Flow 0</tspan> — reverse tunnel: node → Iran control :2333 (persistent, wss/443)</text>
+  <line x1="850" y1="1016" x2="895" y2="1016" stroke="#1d4ed8" stroke-width="2.6"/>
+  <text x="905" y="1020" font-size="11.5" fill="#334155"><tspan font-weight="bold">Flow 1-4</tspan> — user data: User → nginx → rathole data → tunnel → node Xray → Internet</text>
+  <line x1="850" y1="1042" x2="895" y2="1042" stroke="#c2410c" stroke-width="2.4" stroke-dasharray="4 4"/>
+  <text x="905" y="1046" font-size="11.5" fill="#334155"><tspan font-weight="bold">Flow mgmt</tspan> — panel → 127.0.0.1:7001 → tunnel → node API :62050</text>
+
+  <rect x="850" y="1066" width="740" height="80" rx="8" fill="#fffbeb" stroke="#d97706" stroke-width="1.5"/>
+  <text x="1220" y="1088" text-anchor="middle" font-size="12.5" font-weight="bold" fill="#92400e">Path alignment — these THREE must match exactly</text>
+  <text x="1220" y="1110" text-anchor="middle" font-size="11.5" fill="#92400e">user VLESS path   ==   nginx map ($uri)   ==   Xray inbound path on node</text>
+  <text x="1220" y="1130" text-anchor="middle" font-size="11.5" fill="#92400e">/trk01            ==   ~^/trk01           ==   /trk01     (node name = path)</text>
+
+  <text x="850" y="1170" font-size="10.5" fill="#64748b">Caveat: rathole websocket always connects to "/" (path not configurable), so the control channel is</text>
+  <text x="850" y="1186" font-size="10.5" fill="#64748b">distinguished from the fake site by the Upgrade header on the EXACT root. Reality does not work behind Nginx — use VLESS+WS.</text>
+  <text x="850" y="1208" font-size="10.5" fill="#64748b">Latency: traffic crosses the border twice (tunnel + node exit). The Iran server is a single point of failure.</text>
+
+  <text x="820" y="1240" text-anchor="middle" font-size="11" fill="#94a3b8">Generated for the rathole-manager toolkit · see README.md and TRAFFIC-FLOW.md</text>
+</svg>

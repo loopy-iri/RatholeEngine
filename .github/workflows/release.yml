@@ -1,0 +1,48 @@
+name: release
+
+# Sakht-e baste va upload be GitHub Release moghe-e push-e tag-e v* (masalan v1.0.0).
+# baste-ye tolid-shode haman chizi ast ke install.sh az releases/latest/download daryaft mikonad.
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:   # emkan-e ejra-ye dasti az UI
+
+permissions:
+  contents: write       # baraye sakht-e release + upload asset
+
+jobs:
+  build-release:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install packaging tools
+        run: sudo apt-get update -y && sudo apt-get install -y zip
+
+      - name: Build bundle (package.sh)
+        run: bash package.sh
+
+      - name: Collect release assets
+        run: |
+          mkdir -p dist
+          # baste (zip yekhali ya tar.gz fallback)
+          [ -f rathole-manager.zip ]    && cp rathole-manager.zip dist/
+          [ -f rathole-manager.tar.gz ] && cp rathole-manager.tar.gz dist/
+          # nصab-konande-ha ke install.sh be onha niaz darad
+          cp bootstrap.sh dist/
+          cp install.sh dist/
+          ls -lh dist/
+
+      - name: Publish GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            dist/rathole-manager.zip
+            dist/rathole-manager.tar.gz
+            dist/bootstrap.sh
+            dist/install.sh
+          fail_on_unmatched_files: false
+          generate_release_notes: true

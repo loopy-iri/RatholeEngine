@@ -1,0 +1,45 @@
+name: ci
+
+# Lint-e sabok baraye har push/PR: shellcheck + bash -n + py_compile.
+
+on:
+  push:
+    branches: [ main, master ]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install shellcheck
+        run: sudo apt-get update -y && sudo apt-get install -y shellcheck
+
+      - name: bash -n (syntax) on all shell scripts
+        run: |
+          set -e
+          # hameye .sh + do CLI-e bدون-pasvand
+          files=$(find . -type f \( -name '*.sh' -o -name 'ratholectl' -o -name 'ratholenode' \) -not -path './.git/*')
+          for f in $files; do
+            echo "== bash -n $f"
+            bash -n "$f"
+          done
+
+      - name: shellcheck
+        run: |
+          # SC1091: source-e common.sh (masir moghe-e ejra hal mishavad) — hoshdar-e bi-mored.
+          # bقیه warning-ha ekhtar mishavand vali build ra fail nemikonand (severity=error faghat).
+          files=$(find . -type f \( -name '*.sh' -o -name 'ratholectl' -o -name 'ratholenode' \) -not -path './.git/*')
+          shellcheck --shell=bash --severity=error --exclude=SC1091 $files || {
+            echo "shellcheck error-severity findings found"; exit 1;
+          }
+          echo "== warnings (gheyre-blocking) =="
+          shellcheck --shell=bash --severity=warning --exclude=SC1091 $files || true
+
+      - name: python py_compile (hub.py)
+        run: |
+          python3 -m py_compile rathole-manager/ratholehub/hub.py
+          echo "hub.py compiles OK"

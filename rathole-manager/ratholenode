@@ -1,0 +1,1023 @@
+#!/usr/bin/env bash
+# ratholenode — mdirit klaint rathole rooye node kharej (chnd service rooye yek tunnel)
+# tanzimat paih: /etc/rathole/node.env   (SERVER, RATHOLE_VERSION)
+# list serviceha: /etc/rathole/services.conf  (har kht: name|token|inbound_port)
+# hame-ye serviceha zir yek [client] gharar migirand → yek channel kontroli (yek tunnel).
+# nokte: amdan az `set -e` estefade nmiknim (dalil moshabeh ratholectl).
+set -uo pipefail
+
+# common.sh agar knar file bashd, tavabe eshteraki ra lvd kon
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" 2>/dev/null && pwd || echo "$PWD")"
+[ -f "$SCRIPT_DIR/common.sh" ] && source "$SCRIPT_DIR/common.sh"
+
+# pak-sazi temp files dar khrvj; har masir yek ansre arraye ta msire darai faasele ham dorost pak shavad.
+_RTH_TMP=()
+_rth_cleanup(){ [ "${#_RTH_TMP[@]}" -gt 0 ] && rm -rf -- "${_RTH_TMP[@]}"; }
+trap _rth_cleanup EXIT INT TERM
+rth_mktemp(){ local p; p="$(mktemp "$@")" || return 1; _RTH_TMP+=("$p"); echo "$p"; }
+rth_mktempd(){ local d; d="$(mktemp -d "$@")" || return 1; _RTH_TMP+=("$d"); echo "$d"; }
+
+ENV_FILE="/etc/rathole/node.env"
+SVC_FILE="/etc/rathole/services.conf"
+CLIENT_TOML="/etc/rathole/client.toml"
+SVC="rathole-client"
+
+c_g(){ printf '\033[1;32m%s\033[0m' "$*"; }
+c_r(){ printf '\033[1;31m%s\033[0m' "$*"; }
+c_y(){ printf '\033[1;33m%s\033[0m' "$*"; }
+log(){ printf '%s %s\n' "$(c_g '[+]')" "$*"; }
+warn(){ printf '%s %s\n' "$(c_y '[*]')" "$*"; }
+err(){ printf '%s %s\n' "$(c_r '[!]')" "$*" >&2; }
+die(){ err "$*"; exit 1; }
+need_root(){ [ "$(id -u)" -eq 0 ] || die "bayad ba root ejra shavad."; }
+
+load_env(){ [ -f "$ENV_FILE" ] || die "node.env peyda nshd; aval install-node.sh ra ejra kon."; set -a; . "$ENV_FILE"; set +a; }
+
+# barresi tadakhol port inbound ba nginx node + sair servicehaye tunnel
+check_inbound(){
+  local port="$1" label="$2" owner
+  if [ "$port" = "80" ] || [ "$port" = "443" ]; then
+    warn "$label rooye port $port ast ke maamoolan motaaleq be nginx node ast — ehtemal tadakhol."
+  fi
+  if command -v ss >/dev/null 2>&1; then
+    owner="$(ss -ltnpH "sport = :$port" 2>/dev/null | grep -oE 'users:\(\("[^"]+' | sed 's/.*"//' | head -1)"
+    if [ -n "$owner" ] && echo "$owner" | grep -qiE 'nginx'; then
+      err "$label (port $port) motaaleq be nginx ast. port digari entekhab kon."
+      return 1
+    fi
+  fi
+  return 0
+}
+
+# barresi tadakhol port inbound
+# nokte-ye mohem: dar samt-e node, `local_addr` yek MAGHSAD ast (rathole traffic ra be an
+# tahvil midahad), na yek port-e listen. bnbrin yek inbound-e vahed (masalan 127.0.0.1:2087)
+# mitavanad hamzaman az chand server-e Iran (main + chand upstream) traffic begirad (fan-in).
+# pas eshterak-e port bein-e tunnelha MOJAZ ast va nabayad block shavad.
+# tanha tadakhol-e vaghei ba nginx-e node (80/443) ast ke check_inbound an ra migirad.
+# argument sevom (self) faghat baraye sazgari-ye emza negah dashte shode.
+check_port_conflict(){
+  local port="$1" label="$2" self="${3:-}"
+  check_inbound "$port" "$label" || return 1
+  return 0
+}
+
+
+
+# tvlid client.toml az node.env + services.conf (hame zir yek [client])
+gen_client(){
+  load_env
+  [ -f "$SVC_FILE" ] || die "hich srvisi tarif nashode ($SVC_FILE). ba 'ratholenode add-svc' ezafe kon."
+  local host="${SERVER%%:*}"
+  local mode="${TUNNEL:-ws}" remote tls hostline
+  if [ "$mode" = "kcp" ]; then
+    # masir az trigh kcptun lvkal mirvd; TLS lazem nist (kcp khodesh ramz/FEC darad)
+    remote="${KCP_LOCAL:-127.0.0.1:29900}"
+    tls="false"; hostline=""
+  elif [ "$mode" = "plain" ]; then
+    # tunnel-e websocket bedoon-e TLS: mostaghim be port-e HTTP-e sade rooye server Iran
+    remote="${PLAIN_REMOTE:-$SERVER}"; tls="false"; hostline=""
+  elif [ "$mode" = "noise" ]; then
+    # tunnel-e ramznegari-shode ba Noise: mostaghim be port-e omomi-ye rathole-noise rooye Iran (bedoon TLS/cert)
+    remote="${NOISE_REMOTE:-$SERVER}"; tls="false"; hostline=""
+  else
+    remote="${SERVER}"; tls="true"; hostline="hostname = \"${host}\""
+  fi
+
+  {
+    echo "# tvlid khodkar tvst ratholenode — dasti virayesh nakon (tunnel=${mode})"
+    local hbt="${HEARTBEAT_TIMEOUT:-40}"; [ "$mode" = "kcp" ] && hbt="${KCP_HEARTBEAT_TIMEOUT:-90}"
+    echo "[client]"
+    echo "remote_addr = \"${remote}\""
+    echo "retry_interval = 1"
+    echo "heartbeat_timeout = ${hbt}"
+    echo
+    echo "[client.transport]"
+    if [ "$mode" = "noise" ]; then
+      echo "type = \"noise\""
+      echo "[client.transport.noise]"
+      echo "pattern = \"${NOISE_PATTERN:-Noise_NK_25519_ChaChaPoly_BLAKE2s}\""
+      echo "remote_public_key = \"${NOISE_PUBKEY}\""
+    else
+      echo "type = \"websocket\""
+      echo "[client.transport.websocket]"
+      echo "tls = ${tls}"
+      if [ "$tls" = "true" ]; then
+        echo "[client.transport.tls]"
+        echo "$hostline"
+      fi
+    fi
+    while IFS='|' read -r name token inbound; do
+      [ -n "$name" ] || continue
+      case "$name" in \#*) continue ;; esac
+      # CR-e entehai ra pak kon (agar services.conf ba CRLF zakhire shode bashad) va
+      # khatt-e naghes (token/inbound-e khali) ra rad kon — vagarna TOML-e namotabar tolid
+      # mishavad va rathole KOLL-e config ra rad mikonad (hame-ye service-ha down).
+      token="${token%$'\r'}"; inbound="${inbound%$'\r'}"
+      if [ -z "$token" ] || ! echo "$inbound" | grep -qE '^[0-9]+$'; then
+        warn "khatt-e namotabar dar services.conf rad shod (name=$name)."
+        continue
+      fi
+      echo
+      echo "[client.services.${name}]"
+      echo "token = \"${token}\""
+      echo "local_addr = \"127.0.0.1:${inbound}\""
+      echo "type = \"tcp\""
+    done < "$SVC_FILE"
+  } > "$CLIENT_TOML.tmp"
+  # neveshtan in-place (hefz inode) ta rathole ba config_watcher hot-reload konad (bedoon ghati servicehaye faal mesl game)
+  cat "$CLIENT_TOML.tmp" > "$CLIENT_TOML" && rm -f "$CLIENT_TOML.tmp"
+}
+
+# restart kamel (fght baraye taghir trnspvrt mesl kcp on/off lazem ast)
+restart_svc(){
+  systemctl daemon-reload 2>/dev/null || true
+  systemctl enable "$SVC" >/dev/null 2>&1 || true
+  systemctl restart "$SVC" 2>/dev/null && log "$SVC restart shod." || warn "restart $SVC nashod."
+}
+
+# hot-reload: fght agar service khamoosh bood start miknd; dar ghir ainsvrt rathole khodesh config ra mikhanad (bedoon ghati)
+reload_svc(){
+  systemctl daemon-reload 2>/dev/null || true
+  systemctl enable "$SVC" >/dev/null 2>&1 || true
+  if systemctl is-active --quiet "$SVC"; then
+    log "client.toml berooz shd; rathole hot-reload mikonad (tunnelhaye faal mesl game ghat nmishvnd)."
+  else
+    systemctl start "$SVC" 2>/dev/null && log "$SVC start shod." || warn "start $SVC nashod."
+  fi
+}
+
+cmd_apply(){
+  need_root; load_env
+  # check tadakhol port baraye har service
+  if [ -f "$SVC_FILE" ]; then
+    while IFS='|' read -r name token inbound; do
+      [ -n "$name" ] || continue; case "$name" in \#*) continue ;; esac
+      check_port_conflict "$inbound" "inbound $name" "$name" || warn "ba vojood tadakhol adamh midhim."
+    done < "$SVC_FILE"
+
+  fi
+  gen_client
+  reload_svc
+  log "client.toml ba $(grep -cvE '^\s*(#|$)' "$SVC_FILE" 2>/dev/null || echo 0) service rooye yek tunnel sakhte shod."
+}
+
+svc_exists(){ grep -qE "^$1\|" "$SVC_FILE" 2>/dev/null; }
+
+# aatbarsnji-ye moshtarak baraye name/token-e service (jelogiri az tzrigh be TOML/services.conf)
+valid_svc_name(){ echo "$1" | grep -qE '^[a-zA-Z0-9_-]+$'; }
+# token bayad az '|' (jodakonande-ye services.conf) va newline/space va metachar-e TOML khali bashad.
+valid_svc_token(){ echo "$1" | grep -qE '^[A-Za-z0-9._=+/-]+$'; }
+
+cmd_add_svc(){
+  need_root
+  local name="${1:-}" token="${2:-}" inbound="${3:-}"
+  [ -n "$name" ] && [ -n "$token" ] && [ -n "$inbound" ] || die "estefade: ratholenode add-svc <name> <token> <inbound_port>"
+  valid_svc_name "$name" || die "name namotabar."
+  valid_svc_token "$token" || die "token namotabar (faghat [A-Za-z0-9._=+/-] mjaz ast)."
+  echo "$inbound" | grep -qE '^[0-9]+$' || die "port bayad adad bashad."
+  check_port_conflict "$inbound" "service '$name'" || die "tadakhol port — meghdar digari entekhab kon."
+  touch "$SVC_FILE"; chmod 600 "$SVC_FILE"
+  if svc_exists "$name"; then
+    warn "service '$name' vojood dard; beroozresani mishavad."
+    sed -i "/^$name|/d" "$SVC_FILE"
+  fi
+  echo "${name}|${token}|${inbound}" >> "$SVC_FILE"
+  log "service '$name' → 127.0.0.1:$inbound ezafe shod (haman tunnel)."
+  cmd_apply
+}
+
+cmd_rm_svc(){
+  need_root
+  local name="${1:-}"
+  [ -n "$name" ] || die "estefade: ratholenode rm-svc <name>"
+  valid_svc_name "$name" || die "name namotabar."
+  svc_exists "$name" || die "service '$name' peyda nashod."
+  sed -i "/^$name|/d" "$SVC_FILE"
+  log "service '$name' hazf shod."
+  cmd_apply
+}
+
+cmd_ls(){
+  [ -f "$SVC_FILE" ] || { warn "hich srvisi nist."; return; }
+  load_env
+  echo "tunnel be: $(c_y "${SERVER:-?}")  (hame serviceha rooye yek channel kontroli)"
+  printf '%-16s %-10s %s\n' "SERVICE" "INBOUND" "TOKEN"
+  printf '%s\n' "-------------------------------------------"
+  while IFS='|' read -r name token inbound; do
+    [ -n "$name" ] || continue; case "$name" in \#*) continue ;; esac
+    printf '%-16s %-10s %s\n' "$name" "$inbound" "${token:0:8}…"
+  done < "$SVC_FILE"
+}
+
+cmd_set(){
+  need_root; load_env
+  local key="${1:-}" val="${2:-}"
+  [ -n "$key" ] && [ -n "$val" ] || die "estefade: ratholenode set <SERVER|RATHOLE_VERSION> <value>"
+  case "$key" in SERVER|RATHOLE_VERSION) ;; *) die "kelid nashenakhte: $key (baraye serviceha az add-svc/rm-svc estefade kon)";; esac
+  # val ra etebar-sanji kon: hich metachar-e sed (# & \ / newline) nabayad dashte bashad,
+  # vagarna sed-e paiin ('s#...#...#') mishkanad ya jایgozini-ye eshtebah mikonad.
+  case "$key" in
+    SERVER)          echo "$val" | grep -qE '^[A-Za-z0-9_.-]+(:[0-9]{1,5})?$' || die "SERVER namotabar (host ya host:port)." ;;
+    RATHOLE_VERSION) echo "$val" | grep -qE '^[A-Za-z0-9_.-]+$' || die "RATHOLE_VERSION namotabar." ;;
+  esac
+  if grep -qE "^${key}=" "$ENV_FILE"; then sed -i "s#^${key}=.*#${key}=${val}#" "$ENV_FILE"; else echo "${key}=${val}" >> "$ENV_FILE"; fi
+  log "tanzim shod: $key = $val"
+  cmd_apply
+}
+
+cmd_show(){
+  load_env
+  echo "$(c_g '== node.env ==')"; cat "$ENV_FILE"
+  echo; echo "$(c_g '== services ==')"; cmd_ls
+}
+cmd_status(){ systemctl --no-pager status "$SVC" | sed -n '1,12p' || true; }
+cmd_logs(){ journalctl -u "$SVC" -n "${1:-50}" --no-pager || true; }
+
+# ---------- kcp/FEC tunnel samt node (switch masir tunnel az 443 be UDP+FEC) ----------
+KCP_CLI_BIN=/usr/local/bin/kcptun-client
+KCP_CLI_UNIT=/etc/systemd/system/rathole-kcp-client.service
+KCPTUN_VER_DEF="v20260129"
+KCPTUN_BASE_DEF="https://github.com/ossfork/kcptun/releases/download"
+KCP_LOCAL_DEF="127.0.0.1:29900"
+
+env_set(){ # $1=key $2=value (dar node.env)
+  touch "$ENV_FILE"
+  if grep -qE "^$1=" "$ENV_FILE"; then sed -i "s#^$1=.*#$1=$2#" "$ENV_FILE"; else echo "$1=$2" >> "$ENV_FILE"; fi
+}
+
+install_kcptun_client(){
+  local bin="$KCP_CLI_BIN" ver="${KCPTUN_VER:-$KCPTUN_VER_DEF}" base="${KCPTUN_BASE:-$KCPTUN_BASE_DEF}" arch tmp url
+  [ -x "$bin" ] && return 0
+  case "$(uname -m)" in x86_64) arch=amd64 ;; aarch64) arch=arm64 ;; armv7l) arch=armv7 ;; *) die "memari poshtibani nemishavad." ;; esac
+  command -v curl >/dev/null 2>&1 || die "curl lazem ast."
+  log "download kcptun ${ver}..."
+  tmp="$(rth_mktempd)"
+  url="${base}/${ver}/kcptun_linux_${arch}.tar.gz"
+  curl -fsSL "$url" -o "$tmp/k.tgz" || { rm -rf "$tmp"; die "download kcptun shekast khord."; }
+  tar -xzf "$tmp/k.tgz" -C "$tmp" || { rm -rf "$tmp"; die "baz kardan arshiv shekast khord."; }
+  install -m755 "$tmp/client_linux_${arch}" "$bin" || { rm -rf "$tmp"; die "nasb bainri shekast khord."; }
+  rm -rf "$tmp"; log "kcptun-client nasb shod."
+}
+
+gen_kcp_client_unit(){ # $1=remote $2=local $3=key $4=ds $5=ps $6=mode $7=sw $8=rw
+  local remote="$1" local_ep="$2" key="$3" ds="$4" ps="$5" mode="$6" sw="$7" rw="$8"
+  cat > "$KCP_CLI_UNIT" <<UNIT
+[Unit]
+Description=rathole kcp-client (local TCP -> UDP+FEC to Iran)
+After=network.target
+
+[Service]
+Type=simple
+ExecStart=${KCP_CLI_BIN} -r ${remote} -l ${local_ep} -key ${key} -crypt aes-128 -mode ${mode} -mtu 1350 -sndwnd ${sw} -rcvwnd ${rw} -datashard ${ds} -parityshard ${ps} -dscp 46 -nocomp
+Restart=always
+RestartSec=2
+LimitNOFILE=1048576
+
+[Install]
+WantedBy=multi-user.target
+UNIT
+}
+
+# profile FEC → "datashard parityshard mode sndwnd rcvwnd" (bayad ba server Iran iki bashad)
+kcp_profile(){
+  case "${1:-balanced}" in
+    balanced)   echo "10 3 fast2 2048 2048" ;;
+    lossy)      echo "10 5 fast2 2048 2048" ;;
+    aggressive) echo "10 4 fast3 4096 4096" ;;
+    *) return 1 ;;
+  esac
+}
+
+cmd_kcp(){
+  need_root
+  local sub="${1:-status}"; shift || true
+  case "$sub" in
+    on)   cmd_kcp_on "$@" ;;
+    off)  cmd_kcp_off ;;
+    status) cmd_kcp_status ;;
+    *) die "estefade: ratholenode kcp <on <iran_ip:udp_port> <key> [profile]|off|status>" ;;
+  esac
+}
+
+cmd_kcp_on(){
+  local remote="${1:-}" key="${2:-}" profile="${3:-balanced}" local_ep="${KCP_LOCAL:-$KCP_LOCAL_DEF}" params ds ps mode sw rw
+  [ -n "$remote" ] && [ -n "$key" ] || die "estefade: ratholenode kcp on <iran_ip:udp_port> <key> [profile]"
+  echo "$remote" | grep -qE '^[^:]+:[0-9]+$' || die "adres bayad be shkl IP:PORT bashad."
+  params="$(kcp_profile "$profile")" || die "profile namotabar: $profile (balanced|lossy|aggressive)"
+  read -r ds ps mode sw rw <<<"$params"
+  install_kcptun_client
+  gen_kcp_client_unit "$remote" "$local_ep" "$key" "$ds" "$ps" "$mode" "$sw" "$rw"
+  systemctl daemon-reload
+  systemctl enable rathole-kcp-client >/dev/null 2>&1
+  systemctl restart rathole-kcp-client 2>/dev/null
+  if systemctl is-active --quiet rathole-kcp-client; then
+    log "kcp-client faal shod: $local_ep → UDP $remote (profile: $profile)."
+  else
+    err "rathole-kcp-client bala niamd; log: journalctl -u rathole-kcp-client -n 30"
+    return 1
+  fi
+  # switch tunnel be kcp va baztolid client.toml
+  env_set TUNNEL kcp
+  env_set KCP_LOCAL "$local_ep"
+  env_set KCP_REMOTE "$remote"
+  env_set KCP_PROFILE "$profile"
+  gen_client
+  restart_svc
+  log "tunnel be masir kcp/UDP+FEC switch shod. serviceha/tokenha/path karbaran taghir nakard."
+  warn "agar serviceha vsl nshdnd, rooye Iran motmaen shv 'ratholectl kcp on' ba haman profile zade shode va UDP baz ast."
+}
+
+cmd_kcp_off(){
+  systemctl disable --now rathole-kcp-client 2>/dev/null || true
+  rm -f "$KCP_CLI_UNIT"; systemctl daemon-reload 2>/dev/null || true
+  env_set TUNNEL ws
+  gen_client
+  restart_svc
+  log "tunnel be halat websocket/443 bargasht."
+}
+
+cmd_kcp_status(){
+  load_env
+  local mode="${TUNNEL:-ws}"
+  echo "halat tunnel: $(c_y "$mode")"
+  if [ "$mode" = "kcp" ]; then
+    echo "  local: ${KCP_LOCAL:-?}   remote(UDP): ${KCP_REMOTE:-?}   profile: ${KCP_PROFILE:-balanced}"
+    case "${KCP_REMOTE:-}" in *:443) echo "  estetar: UDP/443 ~ QUIC/HTTP3" ;; esac
+    systemctl is-active --quiet rathole-kcp-client && echo "  kcp-client: $(c_g 'active')" || echo "  kcp-client: $(c_r 'inactive')"
+  fi
+  systemctl is-active --quiet "$SVC" && echo "  $SVC: $(c_g 'active')" || echo "  $SVC: $(c_r 'inactive')"
+}
+
+# ---------- plain: tunnel-e websocket bedoon-e TLS (mostaghim be port HTTP-e sade rooye Iran) ----------
+cmd_plain(){
+  need_root
+  local sub="${1:-status}"; shift || true
+  case "$sub" in
+    on)   cmd_plain_on "$@" ;;
+    off)  cmd_plain_off ;;
+    status) cmd_plain_status ;;
+    *) die "estefade: ratholenode plain <on <iran_ip:port>|off|status>" ;;
+  esac
+}
+
+cmd_plain_on(){
+  local remote="${1:-}"
+  [ -n "$remote" ] || die "estefade: ratholenode plain on <iran_ip:port>  (port-e HTTP-e sade rooye Iran, masalan 8880)"
+  echo "$remote" | grep -qE '^[^:]+:[0-9]+$' || die "adres bayad be shkl IP:PORT bashad (masalan 1.2.3.4:8880)."
+  env_set TUNNEL plain
+  env_set PLAIN_REMOTE "$remote"
+  gen_client
+  restart_svc
+  log "tunnel be halat plain (bedoon TLS) switch shod → ws://$remote"
+  warn "rooye server Iran motmaen shv 'ratholectl plain on [port]' zade shode va port TCP baz ast."
+}
+
+cmd_plain_off(){
+  env_set TUNNEL ws
+  gen_client
+  restart_svc
+  log "tunnel be halat websocket/443 (ba TLS) bargasht."
+}
+
+cmd_plain_status(){
+  load_env
+  local mode="${TUNNEL:-ws}"
+  echo "halat tunnel: $(c_y "$mode")"
+  [ "$mode" = "plain" ] && echo "  remote(ws bedoon TLS): ${PLAIN_REMOTE:-?}"
+  systemctl is-active --quiet "$SVC" && echo "  $SVC: $(c_g 'active')" || echo "  $SVC: $(c_r 'inactive')"
+}
+
+# ---------- noise: tunnel-e ramznegari-shode (rathole Noise) mostaghim be port-e omomi-ye rathole-noise rooye Iran ----------
+# bedoon TLS/cert; ramznegari tavassot-e khod-e Noise (X25519+ChaChaPoly). faghat kelid-e omomi-ye server niaz ast.
+cmd_noise(){
+  need_root
+  local sub="${1:-status}"; shift || true
+  case "$sub" in
+    on)   cmd_noise_on "$@" ;;
+    off)  cmd_noise_off ;;
+    status) cmd_noise_status ;;
+    *) die "estefade: ratholenode noise <on <iran_ip:port> <pubkey> [pattern]|off|status>" ;;
+  esac
+}
+
+cmd_noise_on(){
+  local remote="${1:-}" pubkey="${2:-}" pattern="${3:-}"
+  [ -n "$remote" ] && [ -n "$pubkey" ] || die "estefade: ratholenode noise on <iran_ip:port> <pubkey> [pattern]  (port-e omomi-ye rathole-noise rooye Iran, masalan 2334)"
+  echo "$remote" | grep -qE '^[^:]+:[0-9]+$' || die "adres bayad be shkl IP:PORT bashad (masalan 1.2.3.4:2334)."
+  echo "$pubkey" | grep -qE '^[A-Za-z0-9+/]{40,64}={0,2}$' || die "pubkey bayad base64-e motabar bashad (az 'ratholectl noise show' rooye Iran)."
+  env_set TUNNEL noise
+  env_set NOISE_REMOTE "$remote"
+  env_set NOISE_PUBKEY "$pubkey"
+  [ -n "$pattern" ] && env_set NOISE_PATTERN "$pattern" || env_set NOISE_PATTERN "Noise_NK_25519_ChaChaPoly_BLAKE2s"
+  gen_client
+  restart_svc
+  log "tunnel be halat noise (ramznegari-shode) switch shod → noise://$remote"
+  warn "rooye server Iran motmaen shv 'ratholectl noise on' zade shode va in node ba 'ratholectl noise node <name> on' faal shode va port TCP baz ast."
+}
+
+cmd_noise_off(){
+  env_set TUNNEL ws
+  gen_client
+  restart_svc
+  log "tunnel be halat websocket/443 (ba TLS) bargasht."
+}
+
+cmd_noise_status(){
+  load_env
+  local mode="${TUNNEL:-ws}"
+  echo "halat tunnel: $(c_y "$mode")"
+  if [ "$mode" = "noise" ]; then
+    echo "  remote(noise, ramznegari-shode): ${NOISE_REMOTE:-?}"
+    echo "  pubkey-e server: ${NOISE_PUBKEY:-?}"
+  fi
+  systemctl is-active --quiet "$SVC" && echo "  $SVC: $(c_g 'active')" || echo "  $SVC: $(c_r 'inactive')"
+}
+
+cmd_tune(){
+
+  need_root
+  modprobe nf_conntrack 2>/dev/null || true
+  cat >/etc/sysctl.d/99-rathole-tune.conf <<'EOF'
+net.core.default_qdisc=fq
+net.ipv4.tcp_congestion_control=bbr
+net.ipv4.tcp_mtu_probing=1
+net.ipv4.tcp_slow_start_after_idle=0
+net.ipv4.tcp_fastopen=3
+fs.file-max=2097152
+net.core.somaxconn=65535
+net.core.netdev_max_backlog=16384
+net.ipv4.tcp_max_syn_backlog=65535
+net.ipv4.ip_local_port_range=1024 65535
+net.netfilter.nf_conntrack_max=1048576
+net.core.rmem_max=26214400
+net.core.wmem_max=26214400
+net.core.rmem_default=26214400
+net.core.wmem_default=26214400
+EOF
+  sysctl --system >/dev/null 2>&1 || true
+  log "tuning node eemal shod. BBR=$(sysctl -n net.ipv4.tcp_congestion_control 2>/dev/null)"
+}
+
+# web fik sabok baraye fallback inbound TLS/Reality
+FAKEWEB_SVC="rathole-fakeweb"
+cmd_fakeweb(){
+  need_root
+  local action="${1:-}" port="${2:-8081}"
+  case "$action" in
+    start)
+      command -v python3 >/dev/null 2>&1 || die "python3 nasb nist (apt install -y python3)."
+      mkdir -p /var/www/rathole-fake
+      [ -f /var/www/rathole-fake/index.html ] || cat > /var/www/rathole-fake/index.html <<'HTML'
+<!doctype html><html><head><meta charset="utf-8"><title>Welcome</title></head>
+<body style="font-family:sans-serif"><h1>It works!</h1><p>Default web page.</p></body></html>
+HTML
+      cat > /etc/systemd/system/${FAKEWEB_SVC}.service <<UNIT
+[Unit]
+Description=rathole fake web (TLS fallback)
+After=network.target
+
+[Service]
+ExecStart=/usr/bin/python3 -m http.server ${port} --bind 127.0.0.1 --directory /var/www/rathole-fake
+Restart=always
+RestartSec=2
+
+[Install]
+WantedBy=multi-user.target
+UNIT
+      systemctl daemon-reload
+      systemctl enable --now ${FAKEWEB_SVC}
+      log "web fik rooye 127.0.0.1:${port} bala amad (baraye fallback inbound)."
+      ;;
+    stop)
+      systemctl stop ${FAKEWEB_SVC} 2>/dev/null && log "web fik motevaghef shod." || warn "web fik ejra naboodan."
+      ;;
+    rm)
+      systemctl disable --now ${FAKEWEB_SVC} 2>/dev/null || true
+      rm -f /etc/systemd/system/${FAKEWEB_SVC}.service
+      systemctl daemon-reload
+      log "web fik hazf shod."
+      ;;
+    status) systemctl --no-pager status ${FAKEWEB_SVC} | sed -n '1,8p' || true ;;
+    *) die "estefade: ratholenode fakeweb <start|stop|rm|status> [port]" ;;
+  esac
+}
+cmd_check(){
+  load_env
+  [ -f "$SVC_FILE" ] || { warn "srvisi nist."; return; }
+  while IFS='|' read -r name token inbound; do
+    [ -n "$name" ] || continue; case "$name" in \#*) continue ;; esac
+    check_inbound "$inbound" "inbound $name"
+  done < "$SVC_FILE"
+}
+
+# ---------- chnd upstream (atsal node be chnd server Iran) ----------
+UP_DIR="/etc/rathole/upstreams"
+up_env(){ echo "$UP_DIR/$1.env"; }
+up_svc(){ echo "$UP_DIR/$1.svc"; }
+up_toml(){ echo "/etc/rathole/client-$1.toml"; }
+
+ensure_client_template(){
+  local f=/etc/systemd/system/rathole-client@.service
+  [ -f "$f" ] && return 0
+  cat > "$f" <<'UNIT'
+[Unit]
+Description=rathole client (upstream %i)
+After=network.target
+
+[Service]
+Type=simple
+ExecStart=/usr/local/bin/rathole /etc/rathole/client-%i.toml
+Restart=always
+RestartSec=2
+Environment=RUST_LOG=info
+LimitNOFILE=1048576
+
+[Install]
+WantedBy=multi-user.target
+UNIT
+  systemctl daemon-reload 2>/dev/null || true
+}
+
+gen_up_client(){
+  local id="$1"
+  [ -f "$(up_env "$id")" ] || die "upstream '$id' vojood nadarad."
+  local SERVER HOST TUNNEL KCP_LOCAL KCP_REMOTE KCP_PROFILE PLAIN_REMOTE NOISE_REMOTE NOISE_PUBKEY NOISE_PATTERN toml
+  unset SERVER HOST TUNNEL KCP_LOCAL KCP_REMOTE KCP_PROFILE PLAIN_REMOTE NOISE_REMOTE NOISE_PUBKEY NOISE_PATTERN
+  set -a; . "$(up_env "$id")"; set +a
+  HOST="${HOST:-${SERVER%%:*}}"
+  toml="$(up_toml "$id")"
+  local mode="${TUNNEL:-ws}" remote tls
+  if [ "$mode" = "kcp" ]; then
+    remote="${KCP_LOCAL:-127.0.0.1:29901}"; tls="false"
+  elif [ "$mode" = "plain" ]; then
+    remote="${PLAIN_REMOTE:-$SERVER}"; tls="false"
+  elif [ "$mode" = "noise" ]; then
+    remote="${NOISE_REMOTE:-$SERVER}"; tls="false"
+  else
+    remote="${SERVER}"; tls="true"
+  fi
+
+  {
+    local hbt="${HEARTBEAT_TIMEOUT:-40}"; [ "$mode" = "kcp" ] && hbt="${KCP_HEARTBEAT_TIMEOUT:-90}"
+    echo "# tvlid khodkar tvst ratholenode (upstream $id , tunnel=${mode})"
+    echo "[client]"
+    echo "remote_addr = \"${remote}\""
+    echo "retry_interval = 1"
+    echo "heartbeat_timeout = ${hbt}"
+    echo
+    echo "[client.transport]"
+    if [ "$mode" = "noise" ]; then
+      echo "type = \"noise\""
+      echo "[client.transport.noise]"
+      echo "pattern = \"${NOISE_PATTERN:-Noise_NK_25519_ChaChaPoly_BLAKE2s}\""
+      echo "remote_public_key = \"${NOISE_PUBKEY}\""
+    else
+      echo "type = \"websocket\""
+      echo "[client.transport.websocket]"
+      echo "tls = ${tls}"
+      if [ "$tls" = "true" ]; then
+        echo "[client.transport.tls]"
+        echo "hostname = \"${HOST}\""
+      fi
+    fi
+    if [ -f "$(up_svc "$id")" ]; then
+      while IFS='|' read -r name token inbound; do
+        [ -n "$name" ] || continue; case "$name" in \#*) continue ;; esac
+        token="${token%$'\r'}"; inbound="${inbound%$'\r'}"
+        if [ -z "$token" ] || ! echo "$inbound" | grep -qE '^[0-9]+$'; then
+          warn "khatt-e namotabar dar up-svc '$id' rad shod (name=$name)."
+          continue
+        fi
+        echo
+        echo "[client.services.${name}]"
+        echo "token = \"${token}\""
+        echo "local_addr = \"127.0.0.1:${inbound}\""
+        echo "type = \"tcp\""
+      done < "$(up_svc "$id")"
+    fi
+  } > "$toml.tmp"
+  cat "$toml.tmp" > "$toml" && rm -f "$toml.tmp"
+}
+
+# ---------- kcp baraye upstream (har server airan, tunnel FEC jda) ----------
+kv_set(){ # $1=file $2=key $3=val
+  touch "$1"
+  if grep -qE "^$2=" "$1"; then sed -i "s#^$2=.*#$2=$3#" "$1"; else echo "$2=$3" >> "$1"; fi
+}
+
+# entekhab port lvkal azad baraye kcp-client hai mkhtlf (main=29900, upstreamha az 29901)
+pick_kcp_local(){
+  local used p
+  used="$(grep -hoE '^KCP_LOCAL=127\.0\.0\.1:[0-9]+' "$ENV_FILE" "$UP_DIR"/*.env 2>/dev/null | sed 's/.*://')"
+  p=29901
+  while echo "$used" | grep -qx "$p"; do p=$((p+1)); done
+  echo "127.0.0.1:$p"
+}
+
+up_kcp_unit(){ echo "/etc/systemd/system/rathole-kcp-up-$1.service"; }
+
+gen_up_kcp_unit(){ # $1=id $2=remote $3=local $4=key $5=ds $6=ps $7=mode $8=sw $9=rw
+  local id="$1" remote="$2" local_ep="$3" key="$4" ds="$5" ps="$6" mode="$7" sw="$8" rw="$9"
+  cat > "$(up_kcp_unit "$id")" <<UNIT
+[Unit]
+Description=rathole kcp-client upstream ${id} (local TCP -> UDP+FEC)
+After=network.target
+
+[Service]
+Type=simple
+ExecStart=${KCP_CLI_BIN} -r ${remote} -l ${local_ep} -key ${key} -crypt aes-128 -mode ${mode} -mtu 1350 -sndwnd ${sw} -rcvwnd ${rw} -datashard ${ds} -parityshard ${ps} -dscp 46 -nocomp
+Restart=always
+RestartSec=2
+LimitNOFILE=1048576
+
+[Install]
+WantedBy=multi-user.target
+UNIT
+}
+
+up_kcp_on(){ # $1=id $2=remote $3=key [profile]
+  local id="$1" remote="$2" key="$3" profile="${4:-balanced}" params ds ps mode sw rw local_ep
+  [ -n "$remote" ] && [ -n "$key" ] || die "estefade: ratholenode upstream kcp <id> on <iran_ip:udp_port> <key> [profile]"
+  echo "$remote" | grep -qE '^[^:]+:[0-9]+$' || die "adres bayad IP:PORT bashad."
+  params="$(kcp_profile "$profile")" || die "profile namotabar: $profile (balanced|lossy|aggressive)"
+  read -r ds ps mode sw rw <<<"$params"
+  # port lvkal mojood ra ngh dar, vagarna iki azad begir
+  local_ep="$(grep -oE '^KCP_LOCAL=127\.0\.0\.1:[0-9]+' "$(up_env "$id")" 2>/dev/null | cut -d= -f2)"
+  [ -n "$local_ep" ] || local_ep="$(pick_kcp_local)"
+  install_kcptun_client
+  gen_up_kcp_unit "$id" "$remote" "$local_ep" "$key" "$ds" "$ps" "$mode" "$sw" "$rw"
+  systemctl daemon-reload
+  systemctl enable "rathole-kcp-up-${id}" >/dev/null 2>&1
+  systemctl restart "rathole-kcp-up-${id}" 2>/dev/null
+  if systemctl is-active --quiet "rathole-kcp-up-${id}"; then
+    log "kcp upstream '$id' faal shod: $local_ep → UDP $remote (profile: $profile)."
+  else
+    err "rathole-kcp-up-${id} bala niamd; log: journalctl -u rathole-kcp-up-${id} -n 30"; return 1
+  fi
+  kv_set "$(up_env "$id")" TUNNEL kcp
+  kv_set "$(up_env "$id")" KCP_LOCAL "$local_ep"
+  kv_set "$(up_env "$id")" KCP_REMOTE "$remote"
+  kv_set "$(up_env "$id")" KCP_PROFILE "$profile"
+  up_restart "$id"
+  log "upstream '$id' be masir kcp/UDP+FEC switch shod."
+}
+
+up_kcp_off(){ # $1=id
+  local id="$1"
+  systemctl disable --now "rathole-kcp-up-${id}" 2>/dev/null || true
+  rm -f "$(up_kcp_unit "$id")"; systemctl daemon-reload 2>/dev/null || true
+  kv_set "$(up_env "$id")" TUNNEL ws
+  up_restart "$id"
+  log "upstream '$id' be websocket/443 bargasht."
+}
+
+up_kcp_status(){ # $1=id
+  local id="$1" t
+  t="$(grep -oE '^TUNNEL=.*' "$(up_env "$id")" 2>/dev/null | cut -d= -f2)"; t="${t:-ws}"
+  echo "upstream '$id' halat tunnel: $(c_y "$t")"
+  if [ "$t" = "kcp" ]; then
+    echo "  local: $(grep -oE '^KCP_LOCAL=.*' "$(up_env "$id")" | cut -d= -f2)   remote(UDP): $(grep -oE '^KCP_REMOTE=.*' "$(up_env "$id")" | cut -d= -f2)   profile: $(grep -oE '^KCP_PROFILE=.*' "$(up_env "$id")" | cut -d= -f2)"
+    systemctl is-active --quiet "rathole-kcp-up-${id}" && echo "  kcp-client: $(c_g 'active')" || echo "  kcp-client: $(c_r 'inactive')"
+  fi
+  systemctl is-active --quiet "rathole-client@${id}" && echo "  rathole-client@${id}: $(c_g 'active')" || echo "  rathole-client@${id}: $(c_r 'inactive')"
+}
+
+# hot-reload upstream (baraye taghir srvisha; bedoon ghati)
+up_apply(){
+  local id="$1"
+  ensure_client_template
+  gen_up_client "$id"
+  systemctl enable "rathole-client@${id}" >/dev/null 2>&1 || true
+  if systemctl is-active --quiet "rathole-client@${id}"; then
+    log "client-${id}.toml berooz shd; hot-reload (bedoon ghati)."
+  else
+    systemctl start "rathole-client@${id}" 2>/dev/null && log "rathole-client@${id} start shod." || warn "start rathole-client@${id} nashod."
+  fi
+}
+
+# restart kamel yek upstream (baraye taghir trnspvrt kcp)
+up_restart(){
+  local id="$1"
+  ensure_client_template
+  gen_up_client "$id"
+  systemctl enable "rathole-client@${id}" >/dev/null 2>&1 || true
+  systemctl restart "rathole-client@${id}" 2>/dev/null && log "rathole-client@${id} restart shod." || warn "restart rathole-client@${id} nashod."
+}
+
+cmd_upstream(){
+  need_root
+  local sub="${1:-}"; shift || true
+  mkdir -p "$UP_DIR"
+  case "$sub" in
+    add)
+      local id="${1:-}" server="${2:-}" host="${3:-}"
+      [ -n "$id" ] && [ -n "$server" ] || die "estefade: ratholenode upstream add <id> <server:port> [hostname]"
+      echo "$id" | grep -qE '^[a-zA-Z0-9_-]+$' || die "id namotabar."
+      [ "$id" = "main" ] && die "id 'main' reserve ast (tunnel asli)."
+      host="${host:-${server%%:*}}"
+      printf 'SERVER=%s\nHOST=%s\n' "$server" "$host" > "$(up_env "$id")"
+      touch "$(up_svc "$id")"; chmod 600 "$(up_env "$id")" "$(up_svc "$id")"
+      log "upstream '$id' → $server ezafe shod. hala: ratholenode upstream add-svc $id <name> <token> <inbound>"
+      ;;
+    add-svc)
+      local id="${1:-}" name="${2:-}" token="${3:-}" inbound="${4:-}"
+      [ -n "$id" ] && [ -n "$name" ] && [ -n "$token" ] && [ -n "$inbound" ] || die "estefade: ratholenode upstream add-svc <id> <name> <token> <inbound>"
+      [ -f "$(up_env "$id")" ] || die "upstream '$id' nist (aval: ratholenode upstream add $id <server>)."
+      valid_svc_name "$name" || die "name namotabar (faghat harf/adad/khttirh)."
+      valid_svc_token "$token" || die "token namotabar (faghat [A-Za-z0-9._=+/-] mjaz ast)."
+      echo "$inbound" | grep -qE '^[0-9]+$' || die "port bayad adad bashad."
+      check_port_conflict "$inbound" "upstream '$id' service '$name'" || die "tadakhol port — meghdar digari entekhab kon."
+      grep -qE "^${name}\|" "$(up_svc "$id")" 2>/dev/null && sed -i "/^${name}|/d" "$(up_svc "$id")"
+      echo "${name}|${token}|${inbound}" >> "$(up_svc "$id")"
+      log "service '$name' be upstream '$id' ezafe shod."
+      up_apply "$id"
+      ;;
+    rm-svc)
+      local id="${1:-}" name="${2:-}"
+      [ -n "$id" ] && [ -n "$name" ] || die "estefade: ratholenode upstream rm-svc <id> <name>"
+      valid_svc_name "$name" || die "name namotabar."
+      sed -i "/^${name}|/d" "$(up_svc "$id")" 2>/dev/null
+      up_apply "$id"; log "service '$name' az upstream '$id' hazf shod."
+      ;;
+    rm)
+      local id="${1:-}"; [ -n "$id" ] || die "estefade: ratholenode upstream rm <id>"
+      systemctl disable --now "rathole-client@${id}" 2>/dev/null || true
+      systemctl disable --now "rathole-kcp-up-${id}" 2>/dev/null || true
+      rm -f "$(up_kcp_unit "$id")"; systemctl daemon-reload 2>/dev/null || true
+      rm -f "$(up_env "$id")" "$(up_svc "$id")" "$(up_toml "$id")"
+      log "upstream '$id' hazf shod."
+      ;;
+    apply)
+      local id="${1:-}"; [ -n "$id" ] || die "estefade: ratholenode upstream apply <id>"
+      up_apply "$id" ;;
+    restart)
+      local id="${1:-}"; [ -n "$id" ] || die "estefade: ratholenode upstream restart <id>"
+      up_restart "$id" ;;
+    kcp)
+      local id="${1:-}"; shift || true
+      local act="${1:-status}"; shift || true
+      [ -n "$id" ] || die "estefade: ratholenode upstream kcp <id> <on <ip:port> <key> [profile]|off|status>"
+      [ -f "$(up_env "$id")" ] || die "upstream '$id' nist (aval: ratholenode upstream add $id <server>)."
+      case "$act" in
+        on)     up_kcp_on "$id" "${1:-}" "${2:-}" "${3:-}" ;;
+        off)    up_kcp_off "$id" ;;
+        status) up_kcp_status "$id" ;;
+        *) die "estefade: ratholenode upstream kcp <id> <on <ip:port> <key> [profile]|off|status>" ;;
+      esac ;;
+    ls)
+      local mt; mt="$(grep -oE '^TUNNEL=.*' "$ENV_FILE" 2>/dev/null | cut -d= -f2)"; mt="${mt:-ws}"
+      echo "$(c_g 'tunnel asli (main):') $(grep -E '^SERVER=' "$ENV_FILE" 2>/dev/null | cut -d= -f2-)  [tunnel=$mt]"
+      local e id t
+      for e in "$UP_DIR"/*.env; do
+        [ -f "$e" ] || continue
+        id="$(basename "$e" .env)"
+        t="$(grep -oE '^TUNNEL=.*' "$e" | cut -d= -f2)"; t="${t:-ws}"
+        echo "$(c_g "upstream '$id':") $(grep -E '^SERVER=' "$e" | cut -d= -f2-)  [tunnel=$t]"
+        [ -f "$(up_svc "$id")" ] && sed -E 's/\|[^|]*\|/|***|/' "$(up_svc "$id")" | sed 's/^/    /'
+      done ;;
+    *) die "estefade: ratholenode upstream <add|add-svc|rm-svc|rm|apply|kcp|ls> ..." ;;
+  esac
+}
+
+# ---------- watchdog: restart khodkar tunnel gir-karde/ghat-shode ----------
+WD_SVC=/etc/systemd/system/rathole-watchdog.service
+WD_TIMER=/etc/systemd/system/rathole-watchdog.timer
+WD_ENV=/etc/rathole/watchdog.env
+
+cmd_watchdog(){
+  need_root
+  local sub="${1:-status}"; shift || true
+  case "$sub" in
+    on)   wd_on "${1:-60}" ;;
+    off)  wd_off ;;
+    status) wd_status ;;
+    run)  wd_run ;;
+    *) die "estefade: ratholenode watchdog <on [interval_sec]|off|status>" ;;
+  esac
+}
+
+wd_on(){
+  local interval="${1:-60}"
+  echo "$interval" | grep -qE '^[0-9]+$' || die "baze bayad adad (sanie) bashad."
+  printf 'INTERVAL=%s\nWD_WINDOW=%s\nWD_FAILS=%s\n' "$interval" "${WD_WINDOW:-75}" "${WD_FAILS:-8}" > "$WD_ENV"
+  cat > "$WD_SVC" <<UNIT
+[Unit]
+Description=rathole watchdog (auto-restart stuck tunnels)
+After=network.target
+
+[Service]
+Type=oneshot
+EnvironmentFile=-$WD_ENV
+ExecStart=/usr/local/bin/ratholenode watchdog run
+UNIT
+  cat > "$WD_TIMER" <<UNIT
+[Unit]
+Description=rathole watchdog timer
+
+[Timer]
+OnBootSec=60
+OnUnitActiveSec=${interval}
+AccuracySec=5s
+
+[Install]
+WantedBy=timers.target
+UNIT
+  systemctl daemon-reload
+  systemctl enable --now rathole-watchdog.timer 2>/dev/null
+  log "watchdog roshan shod (har ${interval}s check mikonad va tunnel gir-karde ra restart mikonad)."
+}
+
+wd_off(){
+  systemctl disable --now rathole-watchdog.timer 2>/dev/null || true
+  rm -f "$WD_SVC" "$WD_TIMER"; systemctl daemon-reload 2>/dev/null || true
+  log "watchdog khamoosh shod."
+}
+
+wd_status(){
+  if systemctl is-active --quiet rathole-watchdog.timer; then
+    echo "watchdog: $(c_g 'roshan')"
+    systemctl list-timers rathole-watchdog.timer --no-pager 2>/dev/null | sed -n '1,3p' || true
+  else echo "watchdog: $(c_y 'khamoosh')"; fi
+}
+
+# check yek tunnel: agar service/kcp paiin bashad ya (dar hale-e paiin-boodan) log akhir pr az retry/khata bashad → restart
+wd_check_one(){ # $1=rathole-svc  $2=kcp-unit(ekhtiari)  $3=label
+  local svc="$1" kcp="$2" label="$3" bad=0 fails svc_up=1
+  systemctl is-active --quiet "$svc" || { bad=1; svc_up=0; }
+  if [ -n "$kcp" ] && [ -f "/etc/systemd/system/${kcp}.service" ]; then
+    systemctl is-active --quiet "$kcp" || bad=1
+  fi
+  # churn-e retry ra FAGHAT vaghti be onvan kharabi hesab kon ke service DARHAL faal nist.
+  # ba retry_interval=1، yek qati-ye kotah-e gozashte ke khodesh vasl shode dahha khat-e
+  # 'retrying' dar panjere darad — restart-e tunnel-e salem laghv/gheyre-lazem ast.
+  if [ "$svc_up" -eq 0 ]; then
+    fails="$(journalctl -u "$svc" --since "${WD_WINDOW:-75} seconds ago" 2>/dev/null | grep -icE 'retrying|connection (refused|reset)|broken pipe|timed out|handshake|failed to connect' || true)"
+    [ "${fails:-0}" -ge "${WD_FAILS:-8}" ] && bad=1
+  else
+    fails=0
+  fi
+  if [ "$bad" -eq 1 ]; then
+    logger -t rathole-watchdog "restart tunnel '$label' (svc=$svc up=$svc_up fails=$fails)" 2>/dev/null || true
+    [ -n "$kcp" ] && [ -f "/etc/systemd/system/${kcp}.service" ] && systemctl restart "$kcp" 2>/dev/null || true
+    systemctl restart "$svc" 2>/dev/null || true
+    return 1
+  fi
+  return 0
+}
+
+# tashkhis-e vzait-e failover (FAGHAT hoshdar/log): agar main ghat va yek upstream faal bashad,
+# in ra dar failover.state sabt va log mikonad. TAVAJOH: in tabe be tanhaii traffic ra jابeja
+# NEMIKONAD — har upstream tunnel-e mostaghel be server-e digar ast; jابeja-yi-ye vaghei niaz be
+# taghir-e DNS/routing-e samt-e karbar darad ke inja anjam nemishavad. faghat etela-resani ast.
+wd_failover(){
+  local main_active=0 upstream_id="" up_active=0
+  systemctl is-active --quiet "$SVC" && main_active=1
+  local e id
+  for e in "$UP_DIR"/*.env; do
+    [ -f "$e" ] || continue; id="$(basename "$e" .env)"
+    if systemctl is-active --quiet "rathole-client@${id}"; then
+      upstream_id="$id"; up_active=1; break
+    fi
+  done
+  # vzait ghabli failover ra az file mvght bkhvan
+  local failover_state="/etc/rathole/failover.state"
+  local current_failover=""; [ -f "$failover_state" ] && current_failover="$(cat "$failover_state")"
+  if [ "$main_active" -eq 0 ] && [ "$up_active" -eq 1 ] && [ "$current_failover" != "$upstream_id" ]; then
+    logger -t rathole-watchdog "HOSHDAR: main ghat ast; upstream-e faal '$upstream_id' mojood ast (jAbeja-yi-ye traffic dasti/DNS lazem ast)" 2>/dev/null || true
+    echo "$upstream_id" > "$failover_state"
+  elif [ "$main_active" -eq 1 ] && [ -n "$current_failover" ]; then
+    logger -t rathole-watchdog "ETELA: main dobare faal shod (ghablan upstream '$current_failover' faal bood)" 2>/dev/null || true
+    rm -f "$failover_state"
+  fi
+}
+
+wd_run(){
+  local main_bad=0 mkcp=""
+  [ -f "$KCP_CLI_UNIT" ] && mkcp="rathole-kcp-client"
+  wd_check_one "$SVC" "$mkcp" "main" || main_bad=1
+  # upstreamha
+  local e id
+  for e in "$UP_DIR"/*.env; do
+    [ -f "$e" ] || continue; id="$(basename "$e" .env)"
+    wd_check_one "rathole-client@${id}" "rathole-kcp-up-${id}" "$id"
+  done
+  # failover agar main ghat va upstream faal bashad
+  wd_failover
+}
+
+# ---------- backup va restore (node) ----------
+cmd_backup(){
+  need_root
+  local out="${1:-/root/rathole-node-backup-$(date +%Y%m%d-%H%M%S).tar.gz}"
+  local items=()
+  [ -f "$ENV_FILE" ] && items+=("${ENV_FILE#/}")
+  [ -f "$SVC_FILE" ] && items+=("${SVC_FILE#/}")
+  [ -d "$UP_DIR" ] && items+=("${UP_DIR#/}")
+  [ "${#items[@]}" -gt 0 ] || die "chizi baraye backup nist."
+  tar -czf "$out" -C / "${items[@]}" 2>/dev/null || die "sakht backup shekast khord."
+  log "backup node sakhte shod: $out (node.env + services + upstreams)."
+}
+
+cmd_restore(){
+  need_root
+  local f="${1:-}"
+  [ -n "$f" ] && [ -f "$f" ] || die "file backup peyda nashod: $f"
+  tar -xzf "$f" -C / 2>/dev/null || die "baz kardan backup shekast khord."
+  log "restore shod. baztolid configha va rahandazi..."
+  # restart (na hot-reload): backup mumken ast TUNNEL-e motafavet (kcp/plain/noise) dashte
+  # bashad va rathole taghir-e transport ra ba hot-reload emal nemikonad — pas restart lazem ast.
+  if [ -f "$SVC_FILE" ]; then
+    gen_client
+    restart_svc
+  fi
+  # upstreamha
+  if [ -d "$UP_DIR" ]; then
+    local e id
+    for e in "$UP_DIR"/*.env; do [ -f "$e" ] || continue; id="$(basename "$e" .env)"; up_restart "$id"; done
+  fi
+  log "restore node kamel shod."
+}
+
+# namayesh naghshe-ye mohajerat hame-ye tunnelha (main + upstreamha) be kcp/FEC
+cmd_migrate(){
+  load_env
+  echo "$(c_g '==== naghshe-ye mohajerat tunnelha be kcp/FEC (estetar UDP/443) ====')"
+  local mt; mt="$(grep -oE '^TUNNEL=.*' "$ENV_FILE" 2>/dev/null | cut -d= -f2)"; mt="${mt:-ws}"
+  echo
+  echo "$(c_y 'tunnel asli (main)') → ${SERVER:-?}   [aknoon: $mt]"
+  if [ "$mt" = "kcp" ]; then
+    echo "  ✓ az ghabl rooye kcp ast."
+  else
+    echo "  1) rooye server airane main:  ratholectl kcp on 443 balanced   (KEY ra bardar)"
+    echo "  2) hminja rooye node:        ratholenode kcp on ${SERVER%%:*}:443 <KEY> balanced"
+  fi
+  local e id srv t
+  for e in "$UP_DIR"/*.env; do
+    [ -f "$e" ] || continue
+    id="$(basename "$e" .env)"; srv="$(grep -E '^SERVER=' "$e" | cut -d= -f2-)"
+    t="$(grep -oE '^TUNNEL=.*' "$e" | cut -d= -f2)"; t="${t:-ws}"
+    echo
+    echo "$(c_y "upstream '$id'") → $srv   [aknoon: $t]"
+    if [ "$t" = "kcp" ]; then
+      echo "  ✓ az ghabl rooye kcp ast."
+    else
+      echo "  1) rooye server airane '$id':  ratholectl kcp on 443 balanced   (KEY ra bardar)"
+      echo "  2) hminja rooye node:        ratholenode upstream kcp $id on ${srv%%:*}:443 <KEY> balanced"
+    fi
+  done
+  echo
+  echo "harkodam mostaghel va bargasht-pazir ast:  kcp off   |   upstream kcp <id> off"
+  echo "firewall har server Iran:  ufw allow 443/udp"
+}
+
+usage(){ cat <<U
+ratholenode — mdirit klaint rathole (chnd service rooye yek tunnel)
+
+  apply                          baztolid client.toml + check + restart
+  add-svc <name> <token> <port>  afzoodan service be haman tunnel
+  rm-svc  <name>                 hazf service
+  ls                             list serviceha
+  set <SERVER|RATHOLE_VERSION> <v>  taghir tanzim paih
+  check                          fght barresi tadakhol port ba nginx node
+  tune                           eemal BBR + limithaye system (rfa 502 zir burst)
+  kcp on <iran_ip:udp_port> <key> [profile] | off | status   switch tunnel be UDP+FEC (kcptun) ba estetar/profile ya bargasht be 443
+  plain on <iran_ip:port> | off | status   tunnel-e websocket bedoon-e TLS (mostaghim be port HTTP-e sade rooye Iran)
+  noise on <iran_ip:port> <pubkey> [pattern] | off | status   tunnel-e ramznegari-shode (Noise) bedoon-e TLS/cert
+
+  fakeweb <start|stop|rm> [port] web fik sabok baraye fallback inbound TLS (pishfarz 8081)
+  upstream add <id> <server:port> [host]      afzoodan server Iran dovom/sevom (tunnel jda)
+  upstream add-svc <id> <name> <token> <inbound> | rm-svc | rm | apply | ls
+  upstream kcp <id> on <ip:port> <key> [profile] | off | status   kcp baraye an server Iran
+  migrate                        naghshe-ye mohajerat hame tunnelha (main + upstreamha) be kcp
+  watchdog <on [interval]|off|status>   restart khodkar tunnel gir-karde/ghat-shode
+  backup [file] | restore <file>   backup/restore tanzimat node
+  show                           namayesh tanzimat (tokenha makhfi)
+U
+}
+
+case "${1:-show}" in
+  apply)   cmd_apply ;;
+  add-svc) shift; cmd_add_svc "${1:-}" "${2:-}" "${3:-}" ;;
+  rm-svc)  shift; cmd_rm_svc "${1:-}" ;;
+  ls)      cmd_ls ;;
+  set)     shift; cmd_set "${1:-}" "${2:-}" ;;
+  check)   cmd_check ;;
+  tune)    cmd_tune ;;
+  kcp)     shift; cmd_kcp "$@" ;;
+  plain)   shift; cmd_plain "$@" ;;
+  noise)   shift; cmd_noise "$@" ;;
+  restart) need_root; restart_svc ;;
+
+  watchdog) shift; cmd_watchdog "$@" ;;
+  migrate) cmd_migrate ;;
+  fakeweb) shift; cmd_fakeweb "${1:-}" "${2:-}" ;;
+  upstream) shift; cmd_upstream "$@" ;;
+  backup)  shift; cmd_backup "${1:-}" ;;
+  restore) shift; cmd_restore "${1:-}" ;;
+  show)    cmd_show ;;
+  status)  cmd_status ;;
+  logs)    shift; cmd_logs "${1:-50}" ;;
+  -h|--help|help) usage ;;
+  *) err "dstvr nashenakhte: $1"; usage; exit 1 ;;
+esac

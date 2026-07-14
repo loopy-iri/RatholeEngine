@@ -1,0 +1,89 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1180 700" font-family="Segoe UI, Arial, sans-serif">
+  <defs>
+    <marker id="f" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#334155"/>
+    </marker>
+    <marker id="ok" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#16a34a"/>
+    </marker>
+    <marker id="bad" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#dc2626"/>
+    </marker>
+  </defs>
+
+  <rect x="0" y="0" width="1180" height="700" fill="#ffffff"/>
+
+  <!-- title banner -->
+  <rect x="20" y="16" width="1140" height="46" rx="8" fill="#0f172a"/>
+  <text x="590" y="39" text-anchor="middle" fill="#ffffff" font-size="19" font-weight="bold">Central design principle: state → regenerate → hot-reload</text>
+  <text x="590" y="55" text-anchor="middle" fill="#cbd5e1" font-size="12.5">Never hand-edit generated configs. Change state, regenerate, validate, hot-reload — configs rewritten in place (inode preserved).</text>
+
+  <!-- STEP 1: mutate state -->
+  <rect x="40" y="110" width="250" height="150" rx="10" fill="#dbeafe" stroke="#3b82f6" stroke-width="2"/>
+  <text x="165" y="138" text-anchor="middle" font-size="14" font-weight="bold" fill="#1e3a8a">1 · mutate state</text>
+  <text x="165" y="164" text-anchor="middle" font-size="11.5" fill="#1e40af">ratholectl: state.json (jq)</text>
+  <text x="165" y="182" text-anchor="middle" font-size="11.5" fill="#1e40af">state_set / cmd_add / rm …</text>
+  <text x="165" y="206" text-anchor="middle" font-size="11.5" fill="#1e40af">ratholenode: node.env +</text>
+  <text x="165" y="224" text-anchor="middle" font-size="11.5" fill="#1e40af">services.conf</text>
+  <text x="165" y="246" text-anchor="middle" font-size="10.5" fill="#1e3a8a">the single source of truth</text>
+
+  <!-- STEP 2: regenerate -->
+  <rect x="350" y="110" width="270" height="150" rx="10" fill="#ede9fe" stroke="#7c3aed" stroke-width="2"/>
+  <text x="485" y="138" text-anchor="middle" font-size="14" font-weight="bold" fill="#5b21b6">2 · regenerate()</text>
+  <text x="485" y="166" text-anchor="middle" font-size="11.5" fill="#4c1d95">gen_server_toml()</text>
+  <text x="485" y="186" text-anchor="middle" font-size="11.5" fill="#4c1d95">gen_nginx_conf()  (+ stream/SNI)</text>
+  <text x="485" y="206" text-anchor="middle" font-size="11.5" fill="#4c1d95">gen_client() on node</text>
+  <text x="485" y="232" text-anchor="middle" font-size="10.5" fill="#5b21b6">write to .tmp, then cat &gt; file</text>
+  <text x="485" y="248" text-anchor="middle" font-size="10.5" fill="#5b21b6">(inode preserved → watcher reloads)</text>
+
+  <!-- STEP 3: nginx -t -->
+  <rect x="680" y="110" width="250" height="150" rx="10" fill="#fffbeb" stroke="#d97706" stroke-width="2"/>
+  <text x="805" y="138" text-anchor="middle" font-size="14" font-weight="bold" fill="#92400e">3 · validate</text>
+  <text x="805" y="166" text-anchor="middle" font-size="12" fill="#78350f">nginx -t</text>
+  <text x="805" y="190" text-anchor="middle" font-size="11" fill="#78350f">snapshot known-good first</text>
+  <text x="805" y="208" text-anchor="middle" font-size="11" fill="#78350f">(http + stream conf)</text>
+  <text x="805" y="234" text-anchor="middle" font-size="10.5" fill="#92400e">gate before touching live nginx</text>
+
+  <!-- arrows 1->2->3 -->
+  <line x1="290" y1="185" x2="346" y2="185" stroke="#334155" stroke-width="2.4" marker-end="url(#f)"/>
+  <line x1="620" y1="185" x2="676" y2="185" stroke="#334155" stroke-width="2.4" marker-end="url(#f)"/>
+
+  <!-- decision -->
+  <text x="805" y="292" text-anchor="middle" font-size="12.5" font-weight="bold" fill="#334155">nginx -t result?</text>
+
+  <!-- PASS branch -->
+  <line x1="805" y1="300" x2="805" y2="360" stroke="#16a34a" stroke-width="2.4" marker-end="url(#ok)"/>
+  <text x="838" y="335" font-size="12" font-weight="bold" fill="#16a34a">pass</text>
+
+  <rect x="600" y="368" width="410" height="150" rx="10" fill="#ecfdf5" stroke="#059669" stroke-width="2"/>
+  <text x="805" y="396" text-anchor="middle" font-size="14" font-weight="bold" fill="#065f46">4 · hot-reload (active tunnels survive)</text>
+  <text x="805" y="422" text-anchor="middle" font-size="11.5" fill="#166534">systemctl reload nginx</text>
+  <text x="805" y="442" text-anchor="middle" font-size="11.5" fill="#166534">rathole config_watcher re-reads server.toml</text>
+  <text x="805" y="462" text-anchor="middle" font-size="11.5" fill="#166534">on node: reload_svc (prefer hot-reload)</text>
+  <text x="805" y="486" text-anchor="middle" font-size="11" fill="#065f46">save .rathole-good.bak (http + stream)</text>
+  <text x="805" y="504" text-anchor="middle" font-size="10.5" fill="#166534">restart_svc only for transport changes (kcp/noise)</text>
+
+  <!-- FAIL branch -->
+  <line x1="700" y1="270" x2="360" y2="360" stroke="#dc2626" stroke-width="2.4" marker-end="url(#bad)"/>
+  <text x="470" y="300" font-size="12" font-weight="bold" fill="#dc2626">fail</text>
+
+  <rect x="40" y="368" width="500" height="150" rx="10" fill="#fef2f2" stroke="#dc2626" stroke-width="2"/>
+  <text x="290" y="396" text-anchor="middle" font-size="14" font-weight="bold" fill="#991b1b">4′ · auto-revert (nginx stays healthy)</text>
+  <text x="290" y="422" text-anchor="middle" font-size="11.5" fill="#b91c1c">restore http conf AND stream conf from</text>
+  <text x="290" y="440" text-anchor="middle" font-size="11.5" fill="#b91c1c">the pre-regen snapshot / .rathole-good.bak</text>
+  <text x="290" y="462" text-anchor="middle" font-size="11.5" fill="#b91c1c">re-run nginx -t → reload the good config</text>
+  <text x="290" y="486" text-anchor="middle" font-size="11" fill="#991b1b">state.json already changed — fix state &amp; regen again</text>
+  <text x="290" y="504" text-anchor="middle" font-size="10.5" fill="#991b1b">(ratholectl recover / restore for a clean baseline)</text>
+
+  <!-- feedback loop arrow from fail back to state -->
+  <path d="M 165 368 Q 130 320 165 262" fill="none" stroke="#dc2626" stroke-width="1.8" stroke-dasharray="5 4" marker-end="url(#bad)"/>
+  <text x="95" y="318" text-anchor="middle" font-size="10.5" fill="#dc2626">fix &amp;</text>
+  <text x="95" y="332" text-anchor="middle" font-size="10.5" fill="#dc2626">retry</text>
+
+  <!-- bottom note -->
+  <rect x="40" y="560" width="1100" height="110" rx="10" fill="#f8fafc" stroke="#94a3b8" stroke-width="1.5"/>
+  <text x="60" y="588" font-size="12.5" font-weight="bold" fill="#0f172a">Why in-place writes?</text>
+  <text x="60" y="610" font-size="11.5" fill="#334155">rathole's config_watcher watches the file inode. Writing a temp file and cat'ing it into the target keeps the inode, so rathole hot-reloads the</text>
+  <text x="60" y="628" font-size="11.5" fill="#334155">new service set without dropping active tunnels. A plain mv would swap the inode and break the watcher.</text>
+  <text x="60" y="652" font-size="11.5" fill="#475569">Noise runs a second rathole instance (noise-server.toml); a service-list change there uses restart (safer than reload for the transport switch).</text>
+</svg>

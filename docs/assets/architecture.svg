@@ -1,0 +1,94 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1140 580" font-family="Segoe UI, Arial, sans-serif">
+  <defs>
+    <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#334155"/>
+    </marker>
+    <marker id="arrowR" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#9333ea"/>
+    </marker>
+  </defs>
+
+  <rect x="0" y="0" width="1140" height="580" fill="#ffffff"/>
+
+  <!-- title banner -->
+  <rect x="20" y="16" width="1100" height="44" rx="8" fill="#0f172a"/>
+  <text x="570" y="44" text-anchor="middle" fill="#ffffff" font-size="19" font-weight="bold">Multi-location Reverse Tunnel — rathole + Nginx + Pasargad (Xray)</text>
+  <text x="570" y="83" text-anchor="middle" fill="#475569" font-size="14">One port (443) · one domain · one Let's Encrypt cert — multiplexed by Nginx</text>
+
+  <!-- USER zone -->
+  <rect x="30" y="250" width="170" height="110" rx="10" fill="#dbeafe" stroke="#3b82f6" stroke-width="2"/>
+  <text x="115" y="282" text-anchor="middle" font-size="15" font-weight="bold" fill="#1e3a8a">Users (Iran)</text>
+  <text x="115" y="306" text-anchor="middle" font-size="12" fill="#1e40af">Xray client</text>
+  <text x="115" y="326" text-anchor="middle" font-size="12" fill="#1e40af">VLESS + WS</text>
+  <text x="115" y="346" text-anchor="middle" font-size="12" fill="#1e40af">/&lt;node&gt; · TLS</text>
+
+  <!-- IRAN SERVER zone -->
+  <rect x="270" y="110" width="330" height="400" rx="12" fill="#fffbeb" stroke="#d97706" stroke-width="2"/>
+  <text x="435" y="135" text-anchor="middle" font-size="15" font-weight="bold" fill="#92400e">Iran Server — panel.example.ir</text>
+
+  <rect x="300" y="150" width="270" height="78" rx="8" fill="#e0f2fe" stroke="#0284c7" stroke-width="1.5"/>
+  <text x="435" y="178" text-anchor="middle" font-size="14" font-weight="bold" fill="#075985">Nginx :443</text>
+  <text x="435" y="198" text-anchor="middle" font-size="11.5" fill="#0c4a6e">TLS termination (Let's Encrypt)</text>
+  <text x="435" y="216" text-anchor="middle" font-size="11.5" fill="#0c4a6e">path routing (map $uri)</text>
+
+  <rect x="300" y="244" width="270" height="74" rx="8" fill="#fce7f3" stroke="#db2777" stroke-width="1.5"/>
+  <text x="435" y="272" text-anchor="middle" font-size="14" font-weight="bold" fill="#9d174d">Pasargad Panel</text>
+  <text x="435" y="292" text-anchor="middle" font-size="11.5" fill="#831843">+ fake site (root, no upgrade)</text>
+  <text x="435" y="310" text-anchor="middle" font-size="11.5" fill="#831843">:8080 (local)</text>
+
+  <rect x="300" y="334" width="270" height="86" rx="8" fill="#ede9fe" stroke="#7c3aed" stroke-width="1.5"/>
+  <text x="435" y="362" text-anchor="middle" font-size="14" font-weight="bold" fill="#5b21b6">rathole server</text>
+  <text x="435" y="382" text-anchor="middle" font-size="11.5" fill="#4c1d95">control :2333 (root + ws)</text>
+  <text x="435" y="400" text-anchor="middle" font-size="11.5" fill="#4c1d95">data :1001.. per node</text>
+
+  <!-- FOREIGN NODES zone -->
+  <rect x="680" y="110" width="320" height="400" rx="12" fill="#ecfdf5" stroke="#059669" stroke-width="2"/>
+  <text x="840" y="135" text-anchor="middle" font-size="15" font-weight="bold" fill="#065f46">Foreign Nodes</text>
+
+  <rect x="710" y="150" width="260" height="56" rx="8" fill="#dcfce7" stroke="#16a34a" stroke-width="1.5"/>
+  <text x="840" y="174" text-anchor="middle" font-size="13" font-weight="bold" fill="#14532d">Node trk01 — Xray inbound</text>
+  <text x="840" y="193" text-anchor="middle" font-size="11" fill="#166534">VLESS+WS /trk01 · :2087 (no TLS)</text>
+
+  <rect x="710" y="218" width="260" height="50" rx="8" fill="#dcfce7" stroke="#16a34a" stroke-width="1.5"/>
+  <text x="840" y="240" text-anchor="middle" font-size="13" font-weight="bold" fill="#14532d">Node nld01 — Xray</text>
+  <text x="840" y="258" text-anchor="middle" font-size="11" fill="#166534">/nld01 · :2087</text>
+
+  <rect x="710" y="280" width="260" height="50" rx="8" fill="#dcfce7" stroke="#16a34a" stroke-width="1.5"/>
+  <text x="840" y="302" text-anchor="middle" font-size="13" font-weight="bold" fill="#14532d">Node usa01 — Xray</text>
+  <text x="840" y="320" text-anchor="middle" font-size="11" fill="#166534">/usa01 · :2087</text>
+
+  <rect x="710" y="344" width="260" height="56" rx="8" fill="#f0fdf4" stroke="#16a34a" stroke-width="1.2" stroke-dasharray="4 3"/>
+  <text x="840" y="368" text-anchor="middle" font-size="12.5" font-weight="bold" fill="#14532d">rathole client (each node)</text>
+  <text x="840" y="386" text-anchor="middle" font-size="11" fill="#166534">outbound only — no public port</text>
+
+  <!-- INTERNET -->
+  <rect x="1030" y="250" width="92" height="110" rx="10" fill="#f1f5f9" stroke="#64748b" stroke-width="2"/>
+  <text x="1076" y="300" text-anchor="middle" font-size="13" font-weight="bold" fill="#334155">Open</text>
+  <text x="1076" y="320" text-anchor="middle" font-size="13" font-weight="bold" fill="#334155">Internet</text>
+
+  <!-- ARROW: user -> nginx -->
+  <line x1="200" y1="290" x2="296" y2="189" stroke="#334155" stroke-width="2.2" marker-end="url(#arrow)"/>
+  <text x="232" y="232" text-anchor="middle" font-size="11.5" font-weight="bold" fill="#334155">1) HTTPS/WSS</text>
+  <text x="232" y="248" text-anchor="middle" font-size="11" fill="#334155">:443 · /node</text>
+
+  <!-- ARROW: reverse tunnel (nodes <-> rathole) dashed -->
+  <line x1="710" y1="372" x2="574" y2="377" stroke="#9333ea" stroke-width="2.4" stroke-dasharray="7 5" marker-start="url(#arrowR)" marker-end="url(#arrowR)"/>
+  <text x="640" y="430" text-anchor="middle" font-size="11.5" font-weight="bold" fill="#7c3aed">0) reverse tunnel</text>
+  <text x="640" y="446" text-anchor="middle" font-size="11" fill="#7c3aed">single wss/443 (node → Iran)</text>
+
+  <!-- ARROW: nginx data -> rathole (internal) -->
+  <line x1="435" y1="228" x2="435" y2="332" stroke="#0284c7" stroke-width="1.8" stroke-dasharray="3 3" marker-end="url(#arrow)"/>
+  <text x="500" y="285" text-anchor="middle" font-size="10.5" fill="#0369a1">map → data port</text>
+
+  <!-- ARROW: nodes -> internet -->
+  <line x1="970" y1="305" x2="1028" y2="305" stroke="#334155" stroke-width="2.2" marker-end="url(#arrow)"/>
+  <text x="998" y="296" text-anchor="middle" font-size="10.5" font-weight="bold" fill="#334155">exit</text>
+
+  <!-- legend -->
+  <text x="30" y="540" font-size="11.5" fill="#475569">Legend:</text>
+  <line x1="90" y1="536" x2="130" y2="536" stroke="#334155" stroke-width="2.2" marker-end="url(#arrow)"/>
+  <text x="138" y="540" font-size="11.5" fill="#475569">user data path</text>
+  <line x1="250" y1="536" x2="290" y2="536" stroke="#9333ea" stroke-width="2.4" stroke-dasharray="7 5"/>
+  <text x="298" y="540" font-size="11.5" fill="#475569">persistent reverse tunnel</text>
+  <text x="470" y="540" font-size="11.5" fill="#475569">Only :443 on the Iran server is public.</text>
+</svg>

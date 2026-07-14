@@ -1,0 +1,11 @@
+# in repo bayad ba LF ship shavad — installer-ha ba CRLF mishkanand.
+# hame-ye file-haye matni ra be LF normalize kon (dar repo va checkout).
+* text=auto eol=lf
+
+# binary-ha ra dast nazan
+*.png binary
+*.jpg binary
+*.gif binary
+*.zip binary
+*.tar.gz binary
+*.pem binary
