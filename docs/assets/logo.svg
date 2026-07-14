@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="120" height="120" viewBox="0 0 120 120" fill="none" role="img" aria-label="RatholeEngine logo">
+  <title>RatholeEngine</title>
+  <!-- tunnel / wormhole: concentric rings, violet -> slate -->
+  <circle cx="60" cy="60" r="52" stroke="#7c3aed" stroke-width="6" opacity="0.28"/>
+  <circle cx="60" cy="60" r="40" stroke="#7c3aed" stroke-width="6" opacity="0.5"/>
+  <circle cx="60" cy="60" r="28" stroke="#7c3aed" stroke-width="6" opacity="0.85"/>
+  <circle cx="60" cy="60" r="16" fill="#334155"/>
+  <!-- data packet shooting through the tunnel -->
+  <path d="M34 60 H74" stroke="#f8fafc" stroke-width="6" stroke-linecap="round"/>
+  <path d="M66 50 L82 60 L66 70 Z" fill="#f8fafc"/>
+</svg>

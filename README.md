@@ -1,20 +1,41 @@
-# RatholeEngine
-
-> Multi-location reverse-tunnel system on **rathole + Nginx** — one port (443), one domain, one certificate, many foreign nodes routed by URL path. Built for censorship-resistant tunneling into Iran. (The CLI tools live under [`rathole-manager/`](rathole-manager/).)
-
 <div align="center">
 
-<!-- badges (placeholders — wire up once the repo is on GitHub) -->
+<img src="docs/assets/logo.svg" alt="RatholeEngine" width="120" height="120" />
+
+# RatholeEngine
+
+**Multi-location reverse-tunnel system on rathole + Nginx**
+
+_One port · one domain · one certificate · many foreign nodes routed by URL path._
+_Built for censorship-resistant tunneling into Iran._
+
+<!-- badges -->
+[![CI](https://github.com/loopy-iri/RatholeEngine/actions/workflows/ci.yml/badge.svg)](https://github.com/loopy-iri/RatholeEngine/actions/workflows/ci.yml)
+[![Release](https://img.shields.io/github/v/release/loopy-iri/RatholeEngine?sort=semver&color=7c3aed)](https://github.com/loopy-iri/RatholeEngine/releases/latest)
+[![Stars](https://img.shields.io/github/stars/loopy-iri/RatholeEngine?style=flat&color=16a34a)](https://github.com/loopy-iri/RatholeEngine/stargazers)
+<br/>
 ![shell](https://img.shields.io/badge/shell-bash-4EAA25?logo=gnubash&logoColor=white)
 ![python](https://img.shields.io/badge/python-stdlib%20only-3776AB?logo=python&logoColor=white)
 ![tunnel](https://img.shields.io/badge/tunnel-rathole%20%2B%20nginx-7c3aed)
-![status](https://img.shields.io/badge/status-active-16a34a)
+
+[**English**](#what-is-this) · [**فارسی**](docs/README.fa.md) · [Quick start](#quick-start) · [Docs](#documentation)
 
 </div>
 
-**فارسی:** برای مرجع کامل فارسی به [`docs/README.fa.md`](docs/README.fa.md) بروید. خلاصه‌ی فارسی در انتهای همین صفحه است.
+> The CLI tools live under [`rathole-manager/`](rathole-manager/). For the full Persian reference see [`docs/README.fa.md`](docs/README.fa.md); a Persian summary is at the bottom of this page.
 
 ---
+
+## Contents
+
+- [What is this](#what-is-this)
+- [Three roles](#three-roles)
+- [Transport modes](#transport-modes)
+- [Quick start](#quick-start)
+- [Update & rollback](#update--rollback)
+- [Documentation](#documentation)
+- [Repository layout](#repository-layout)
+- [خلاصه‌ی فارسی](#خلاصهی-فارسی)
 
 ## What is this
 
