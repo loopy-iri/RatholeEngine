@@ -101,4 +101,21 @@ jq '(.nodes[]|select(.name=="gm01")|.sni)="ex.com"' "$ROOT/etc/rathole-manager/s
 bash "$RUN" regenerate
 sed -n '/map \$http_x_cdn_id \$direct_node/,/}/p' "$CONF" | grep -q '"gm01"' && echo "FAIL: node SNI dar map" || echo "OK: node SNI hazf shod az map"
 
+line "tst 12: direct_port == plain_port -> yek block (bedoon duplicate listen)"
+jq 'del(.direct_port,.direct_header) | .plain_port=9000 | .direct_port=9000 | .direct_header="X-Cdn-Id"' "$ROOT/etc/rathole-manager/state.json" > "$ROOT/s.tmp" && mv "$ROOT/s.tmp" "$ROOT/etc/rathole-manager/state.json"
+bash "$RUN" regenerate
+# faghat yek 'listen 9000;' bayad bashad
+CNT="$(grep -cE '^\s*listen 9000;' "$CONF")"
+[ "$CNT" = "1" ] && echo "OK: yek listen 9000" || echo "FAIL: $CNT listen 9000 (duplicate)"
+# map 2 branch-e khali bayad be $backend_port bashad, na fake_port
+sed -n '/map \$direct_node \$direct_backend/,/}/p' "$CONF" | grep -qE '""\s+\$backend_port;' && echo "OK: fallback = backend_port (fall-through)" || echo "FAIL: fallback ghalat"
+# location plain bayad be direct_backend proxy konad
+awk '/listen 9000;/{f=1} f&&/proxy_pass http:\/\/127.0.0.1:\$direct_backend;/{print "found"; exit}' "$CONF" | grep -q found && echo "OK: plain location -> direct_backend" || echo "FAIL: plain location -> direct_backend nist"
+
+line "tst 13: regression — plain-only (bedoon direct) hanooz backend_port"
+jq 'del(.direct_port,.direct_header) | .plain_port=8880' "$ROOT/etc/rathole-manager/state.json" > "$ROOT/s.tmp" && mv "$ROOT/s.tmp" "$ROOT/etc/rathole-manager/state.json"
+bash "$RUN" regenerate
+awk '/listen 8880;/{f=1} f&&/proxy_pass http:\/\/127.0.0.1:\$backend_port;/{print "found"; exit}' "$CONF" | grep -q found && echo "OK: plain-only -> backend_port" || echo "FAIL: plain-only regression"
+grep -q 'map .* \$direct_node' "$CONF" && echo "FAIL: map direct baraye plain-only tvlid shod" || echo "OK: bedoon direct, map direct nist"
+
 echo "SANDBOX=$ROOT"

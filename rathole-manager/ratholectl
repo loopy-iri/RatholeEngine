@@ -521,6 +521,13 @@ NGINX
     # az haman maphaye bala (backend_port/root_backend) estefade mikonad; TLS-i dar kar nist.
     local plain_port; plain_port="$(jq -r '.plain_port // empty' "$STATE" 2>/dev/null)"
     if [ -n "$plain_port" ] && [ "$plain_port" != null ]; then
+      # agar direct_port == plain_port (merge), location / bayad be $direct_backend berad
+      # (header match -> node port; khali -> map2 fallback = $backend_port fall-through).
+      local plain_backend='$backend_port'
+      local dm_port; dm_port="$(jq -r '.direct_port // empty' "$STATE" 2>/dev/null)"
+      if [ -n "$dm_port" ] && [ "$dm_port" != null ] && [ "$dm_port" = "$plain_port" ]; then
+        plain_backend='$direct_backend'
+      fi
       cat <<NGINXP
 server {
     listen ${plain_port};
@@ -541,7 +548,7 @@ server {
         proxy_send_timeout 86400s;
     }
     location / {
-        proxy_pass http://127.0.0.1:\$backend_port;
+        proxy_pass http://127.0.0.1:${plain_backend};
         proxy_http_version 1.1;
         proxy_set_header Upgrade \$http_upgrade;
         proxy_set_header Connection \$connection_upgrade;
