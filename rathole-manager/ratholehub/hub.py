@@ -1290,6 +1290,8 @@ const DICT={
   noise_mode:'halat noise (ramznegari-shode, bedoon TLS/cert):',noise_on:'noise on',noise_off:'noise off',noise_node_on:'in node → noise',noise_node_off:'in node → ws',
   t_noise_iran:'roshan kardan noise (samt Iran)',l_noise_port:'port TCP omomi (masalan 2334)',
   t_noise_node:'roshan kardan noise (samt node)',l_noise_remote:'IP:PORT Iran (TCP noise)',l_noise_key:'pubkey server (az "namayesh")',l_noise_pattern:'pattern (pishfarz: Noise_NK...)',
+  direct_mode:'halat direct-IP (masiryabi ba header, bedoon TLS):',direct_on:'direct on',direct_off:'direct off',
+  t_direct_iran:'roshan kardan direct-IP (samt Iran)',l_direct_port:'port HTTP (masalan 8081)',l_direct_header:'naam header (masalan X-Cdn-Id)',
 
   restart_rathole:'restart rathole',cf_restart:'restart rathole-server? hameye tunnelha lahzei ghat mishavand.',
   fakeweb:'web fake:',fw_start:'roshan/taghir port',fw_stop:'tavaghof',fw_rm:'khamoosh kamel',cf_fwrm:'hazf kamel web fake?',
@@ -1352,6 +1354,8 @@ const DICT={
   noise_mode:'Noise mode (encrypted, no TLS/cert):',noise_on:'noise on',noise_off:'noise off',noise_node_on:'this node → noise',noise_node_off:'this node → ws',
   t_noise_iran:'Enable noise (Iran side)',l_noise_port:'Public TCP port (e.g. 2334)',
   t_noise_node:'Enable noise (node side)',l_noise_remote:'IP:PORT Iran (TCP noise)',l_noise_key:'Server pubkey (from "Show")',l_noise_pattern:'Pattern (default: Noise_NK...)',
+  direct_mode:'Direct-IP (header routing, no TLS):',direct_on:'direct on',direct_off:'direct off',
+  t_direct_iran:'Enable direct-IP (Iran side)',l_direct_port:'HTTP port (e.g. 8081)',l_direct_header:'Header name (e.g. X-Cdn-Id)',
 
   restart_rathole:'restart rathole',cf_restart:'Restart rathole-server? All tunnels drop briefly.',
   fakeweb:'Fake web:',fw_start:'Start/Change port',fw_stop:'Stop',fw_rm:'Remove fully',cf_fwrm:'Remove fake web completely?',
@@ -1523,6 +1527,10 @@ function renderIran(n,ov){
    <button class="gh" onclick="run('${n}','noise_show')">${t('show_key')}</button>
    <button class="s" onclick="noiseNode('${n}','on')">${t('noise_node_on')}</button>
    <button class="s" onclick="noiseNode('${n}','off')">${t('noise_node_off')}</button></div>
+   <div class="btns" style="margin-top:6px"><span class="sub">${t('direct_mode')}</span>
+   <button class="g" onclick="directOnIran('${n}')">${t('direct_on')}</button>
+   <button class="r" onclick="run('${n}','direct_off')">${t('direct_off')}</button>
+   <button class="gh" onclick="run('${n}','direct_show')">${t('show_key')}</button></div>
    <div class="btns" style="margin-top:6px"><span class="sub">${t('fakeweb')}</span>
 
    <button class="g" onclick="fakewebStart('${n}')">${t('fw_start')}</button>
@@ -1739,6 +1747,10 @@ function kcpOnIran(n){formModal(t('t_kcp_iran'),[
 function plainOnIran(n){formModal(t('t_plain_iran'),[
   {id:'port',label:t('l_plain_port'),val:'8880',req:1}],
   v=>{closeModal();run(n,'plain_on',{port:v.port});});}
+function directOnIran(n){formModal(t('t_direct_iran'),[
+  {id:'port',label:t('l_direct_port'),val:'8081',req:1},
+  {id:'header',label:t('l_direct_header'),val:'X-Cdn-Id',req:1}],
+  v=>{closeModal();run(n,'direct_on',{port:v.port,header:v.header});});}
 function plainOnNode(n){formModal(t('t_plain_node'),[
   {id:'remote',label:t('l_plain_remote'),ph:'5.202.4.40:8880',req:1}],
   v=>{closeModal();run(n,'plain_on',{remote:v.remote});});}
