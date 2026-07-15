@@ -19,6 +19,79 @@ ask_yn(){ local p="$1" a; read -rp "$p [y/N]: " a; [[ "$a" =~ ^[Yy]$ ]]; }
 
 [ "$(id -u)" -eq 0 ] || die "bayad ba root ejra shavad (sudo bash install-panel.sh)."
 
+is_tty(){ [ -t 0 ] || [ -r /dev/tty ]; }
+# porsesh-e amn zir-e curl|bash: az /dev/tty bekhan agar stdin tty nabashad
+ask_tty(){ local p="$1" a; if [ -t 0 ]; then read -rp "$p" a; else read -rp "$p" a </dev/tty; fi; printf '%s' "$a"; }
+
+# ---------- halat-e nasb: takmil (resume) ya az-no (fresh) ----------
+# flaghaye --fresh/--repair az argumenthaye init joda mishavand (baghi be `init` pass mishavad).
+FRESH=0
+INIT_ARGS=()
+for a in "$@"; do
+  case "$a" in
+    --fresh|--reinstall|--scratch|--from-scratch) FRESH=1 ;;
+    --repair|--resume|--complete)                 FRESH=0 ;;
+    *) INIT_ARGS+=("$a") ;;
+  esac
+done
+
+# asari az nasb-e ghabli (kamel ya naghes) hast?
+detect_partial(){
+  [ -x /usr/local/bin/rathole ] \
+    || [ -x /usr/local/bin/ratholectl ] \
+    || [ -f /etc/rathole-manager/state.json ] \
+    || [ -f /etc/systemd/system/rathole-server.service ] \
+    || [ -f /etc/nginx/conf.d/rathole.conf ]
+}
+
+# gozaresh-e ajza-ye mojood/gomshode-ye nasb-e ghabli
+report_state(){
+  local ok="$(c_g '✓')" no="$(c_r '✗')"
+  local mark
+  [ -x /usr/local/bin/rathole ]                        && mark="$ok" || mark="$no"; echo "    $mark binary rathole"
+  [ -x /usr/local/bin/ratholectl ]                     && mark="$ok" || mark="$no"; echo "    $mark ratholectl"
+  [ -f /usr/local/share/rathole/common.sh ]            && mark="$ok" || mark="$no"; echo "    $mark common.sh"
+  [ -f /etc/systemd/system/rathole-server.service ]    && mark="$ok" || mark="$no"; echo "    $mark systemd unit"
+  [ -f /etc/rathole-manager/state.json ]               && mark="$ok" || mark="$no"; echo "    $mark state.json (init)"
+  [ -f /etc/rathole/server.toml ]                      && mark="$ok" || mark="$no"; echo "    $mark server.toml"
+  [ -f /etc/nginx/conf.d/rathole.conf ]                && mark="$ok" || mark="$no"; echo "    $mark nginx rathole.conf"
+}
+
+# pak-sazi-e vaziat-e ghabli (ba backup) baraye nasb-e az-no. binary/gvahi dast nemikhorad.
+fresh_reset(){
+  local ts bdir p; ts="$(date +%Y%m%d-%H%M%S)"
+  bdir="/var/backups/rathole-manager/fresh-reset-$ts"
+  mkdir -p "$bdir"
+  warn "backup-e vaziat-e ghabli dar: $bdir (agar lazem shod bargardan)."
+  systemctl stop rathole-server 2>/dev/null || true
+  for p in /etc/rathole-manager/state.json \
+           /etc/rathole/server.toml \
+           /etc/nginx/conf.d/rathole.conf \
+           /etc/nginx/conf.d/rathole-stream.conf; do
+    if [ -e "$p" ]; then cp -a "$p" "$bdir/" 2>/dev/null || true; rm -f "$p"; fi
+  done
+  log "vaziat-e ghabli pak shod; hameye ajza az no sakhte mishavand (init-e mojadad)."
+}
+
+if detect_partial; then
+  warn "asari az nasb-e ghabli/naghes peyda shod:"
+  report_state
+  if [ "$FRESH" -eq 1 ]; then
+    warn "halat: nasb-e AZ-NO (--fresh) → pak-sazi va sakht-e mojadad."
+    fresh_reset
+  elif is_tty; then
+    echo
+    echo "  1) $(c_g 'TAKMIL') — ajza-ye gomshode ra kamel kon، vaziat-e mojood hefz shavad (tosiye)"
+    echo "  2) $(c_y 'AZ-NO')  — pak-sazi-e config/state (ba backup) va nasb-e kamel az avval"
+    ans="$(ask_tty 'entekhab [1/2] (pishfarz 1): ')"
+    if [ "$ans" = "2" ]; then FRESH=1; fresh_reset
+    else log "halat: TAKMIL — nasb-e naghes edame/takmil mishavad."; fi
+  else
+    # bedoon-e terminal (curl|bash): amn-tarin = takmil (bedoon-e pak-sazi)
+    log "halat: TAKMIL-e khodkar (bedoon-e terminal). baraye nasb-e az-no: --fresh"
+  fi
+fi
+
 # ---------- memari ----------
 case "$(uname -m)" in
   x86_64)  RH_ARCH="x86_64-unknown-linux-gnu" ;;
@@ -116,10 +189,10 @@ install_rathole
 
 
 # ---------- dairktvriha va ratholectl ----------
-mkdir -p /etc/rathole /etc/rathole-manager
+mkdir -p /etc/rathole /etc/rathole-manager /usr/local/share/rathole
 [ -f "$SCRIPT_DIR/ratholectl" ] || die "ratholectl knar in askript peyda nashod."
 install -m 755 "$SCRIPT_DIR/ratholectl" /usr/local/bin/ratholectl
-[ -f "$SCRIPT_DIR/common.sh" ] && { install -m 644 "$SCRIPT_DIR/common.sh" /usr/local/share/rathole/common.sh; log "common.sh nasb shod."; }
+[ -f "$SCRIPT_DIR/common.sh" ] && { mkdir -p /usr/local/share/rathole; install -m 644 "$SCRIPT_DIR/common.sh" /usr/local/share/rathole/common.sh; log "common.sh nasb shod."; }
 log "ratholectl dar /usr/local/bin nasb shod."
 
 # ---------- systemd ----------
@@ -202,7 +275,7 @@ log "nasb sthsistm tmam shod. hala tanzimat avlih (init)..."
 if [ -f /etc/rathole-manager/state.json ]; then
   warn "state.json az ghabl vojood dard; az init rad mishvim. baraye taghir: ratholectl init ..."
 else
-  /usr/local/bin/ratholectl init "$@" || die "init shekast khord."
+  /usr/local/bin/ratholectl init "${INIT_ARGS[@]}" || die "init shekast khord."
 fi
 
 # masir file nginx ke init tvlid/riplis krd ra az state bkhvan va az tadakhol mstsni kon

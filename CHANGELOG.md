@@ -9,6 +9,14 @@ release.yml hamin bakhsh ra be onvan-e title/body-e GitHub Release montasher mik
 
 ## [Unreleased]
 
+## [1.4.1] - 2026-07-15
+
+### Fixed
+- **install-panel.sh:** dayrektori-ye `/usr/local/share/rathole` ghabl az kopi-ye `common.sh` sakhte nemishod → khata-ye `install: cannot create regular file '/usr/local/share/rathole/common.sh': No such file or directory` dar nasb-e panel-e Iran. hala `mkdir -p` ezafe shod (hamsan-e install-node.sh)
+
+### Added
+- **install-panel.sh:** tashkhis-e nasb-e ghabli/naghes + entekhab-e halat — **TAKMIL** (resume: ajza-ye gomshode kamel mishavand، vaziat hefz) ya **AZ-NO** (fresh: pak-sazi-ye config/state ba backup dar `/var/backups/rathole-manager/fresh-reset-*` va nasb-e kamel). flag-haye `--fresh`/`--repair`؛ zir-e `curl|bash` (bedoon terminal) pishfarz TAKMIL-e amn ast. gozaresh-e ✓/✗-e har joz (binary/ratholectl/common.sh/unit/state/server.toml/nginx) namayesh dade mishavad
+
 ## [1.4.0] - 2026-07-15
 
 ### Added
@@ -69,7 +77,9 @@ release.yml hamin bakhsh ra be onvan-e title/body-e GitHub Release montasher mik
   - transport-ha: websocket+TLS / kcp / plain / noise / game-SNI
   - install/update/rollback: `install.sh`، `bootstrap.sh`، `update.sh` ba snapshot + health-check
 
-[Unreleased]: https://github.com/loopy-iri/RatholeEngine/compare/v1.3.0...HEAD
+[Unreleased]: https://github.com/loopy-iri/RatholeEngine/compare/v1.4.1...HEAD
+[1.4.1]: https://github.com/loopy-iri/RatholeEngine/compare/v1.4.0...v1.4.1
+[1.4.0]: https://github.com/loopy-iri/RatholeEngine/compare/v1.3.0...v1.4.0
 [1.3.0]: https://github.com/loopy-iri/RatholeEngine/compare/v1.2.0...v1.3.0
 [1.2.0]: https://github.com/loopy-iri/RatholeEngine/compare/v1.1.0...v1.2.0
 [1.1.0]: https://github.com/loopy-iri/RatholeEngine/compare/v1.0.2...v1.1.0
