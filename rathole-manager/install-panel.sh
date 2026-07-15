@@ -303,12 +303,31 @@ sleep 1
 if systemctl is-active --quiet rathole-server; then
   log "rathole-server faal shod va enable ast (start-e khodkar posht-e reboot)."
 else
-  err "rathole-server start nashod. tashkhis:"
-  systemctl status rathole-server --no-pager -l 2>/dev/null | sed -n '1,8p' >&2 || true
-  err "--- akharin log-ha ---"
-  journalctl -u rathole-server --no-pager -n 15 2>/dev/null >&2 || true
-  err "elat-e shayea: binary-e rathole nasazgar (memari/glibc) ya server.toml-e naghes."
-  err "barresi: /usr/local/bin/rathole --version   va   cat /etc/rathole/server.toml"
+  err "rathole-server start nashod. tashkhis-e daghigh (ejra-ye mostaghim-e binary):"
+  # rathole be stdout log mikonad; dar halat-e auto-restart journal khali/dir mimanad.
+  # pas binary ra mostaghim ba timeout ejra mikonim ta khata-ye vaghei ra bebinim.
+  systemctl stop rathole-server 2>/dev/null || true
+  RTH_DIAG="$(RUST_LOG=info timeout 3 /usr/local/bin/rathole /etc/rathole/server.toml 2>&1 | head -20)"
+  printf '%s\n' "$RTH_DIAG" | sed 's/^/    /' >&2
+  # tashkhis-e ellat-haye shayea az rooye khorooji
+  if printf '%s' "$RTH_DIAG" | grep -qi "Address already in use\|Failed to listen"; then
+    RTH_CTRL="$(jq -r '.control_port // 2333' /etc/rathole-manager/state.json 2>/dev/null)"
+    err "-> port-e kontrol ($RTH_CTRL) eshghal ast (ehtemalan yek instans-e rathole-ye ghadimi hanoz balast)."
+    err "   barresi: ss -ltnp | grep :$RTH_CTRL    va    pkill -f '/usr/local/bin/rathole'"
+  elif printf '%s' "$RTH_DIAG" | grep -qi "No such file\|cannot\|Exec format\|not found\|GLIBC"; then
+    err "-> binary-e rathole nasazgar ast (memari/glibc) ya server.toml peyda nashod."
+    err "   barresi: /usr/local/bin/rathole --version   va   uname -m"
+  elif printf '%s' "$RTH_DIAG" | grep -qi "Listening at"; then
+    err "-> binary salem start shod؛ moshkel az systemd/environment bood."
+  fi
+  # yek talash-e dobare baad az tashkhis
+  systemctl start rathole-server 2>/dev/null || true; sleep 1
+  if systemctl is-active --quiet rathole-server; then
+    log "rathole-server dar talash-e dovom faal shod."
+  else
+    err "hanoz start nashod. baad az raf-e moshkel: sudo systemctl restart rathole-server"
+    err "log-e kamel: journalctl -u rathole-server -n 40 --no-pager"
+  fi
 fi
 
 echo

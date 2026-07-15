@@ -9,6 +9,12 @@ release.yml hamin bakhsh ra be onvan-e title/body-e GitHub Release montasher mik
 
 ## [Unreleased]
 
+## [1.4.3] - 2026-07-15
+
+### Fixed
+- **ratholectl `obtain_cert` / game cert:** prompt-e aimil-e Let's Encrypt ham az stdin mikhand → zir-e `curl|bash`/bootstrap khali migereft va `aimil lazem ast` → certbot ejra nemishod → gvahi sakhte nemishod → `nginx -t` shekast (cert file nabood). hala az `rth_read` (tty) mikhanad va agar aimil khali bashad ba `--register-unsafely-without-email` edame midahad (be jaye die)
+- **install-panel.sh:** vaghti `rathole-server` start nemishod، `journalctl` (dar halat-e auto-restart) khali bood va payam-e tashkhis mobham. hala binary mostaghim ba `timeout` ejra mishavad ta khata-ye vaghei (port eshghal / nasazgari-ye binary / server.toml) neshan dade shavad + rahnama-ye daghigh (`ss -ltnp`، `pkill`، `--version`) + yek talash-e dobare
+
 ## [1.4.2] - 2026-07-15
 
 ### Fixed
@@ -86,7 +92,8 @@ release.yml hamin bakhsh ra be onvan-e title/body-e GitHub Release montasher mik
   - transport-ha: websocket+TLS / kcp / plain / noise / game-SNI
   - install/update/rollback: `install.sh`، `bootstrap.sh`، `update.sh` ba snapshot + health-check
 
-[Unreleased]: https://github.com/loopy-iri/RatholeEngine/compare/v1.4.2...HEAD
+[Unreleased]: https://github.com/loopy-iri/RatholeEngine/compare/v1.4.3...HEAD
+[1.4.3]: https://github.com/loopy-iri/RatholeEngine/compare/v1.4.2...v1.4.3
 [1.4.2]: https://github.com/loopy-iri/RatholeEngine/compare/v1.4.1...v1.4.2
 [1.4.1]: https://github.com/loopy-iri/RatholeEngine/compare/v1.4.0...v1.4.1
 [1.4.0]: https://github.com/loopy-iri/RatholeEngine/compare/v1.3.0...v1.4.0

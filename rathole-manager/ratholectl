@@ -101,13 +101,13 @@ noise_genkey(){
 obtain_cert(){ # $1=domain ; khorooji: masir gvahi dar /etc/letsencrypt
   local domain="$1" email
   command -v certbot >/dev/null 2>&1 || { err "certbot nasb nist."; return 1; }
-  read -rp "aimil baraye Let's Encrypt: " email
-  [ -n "$email" ] || { err "aimil lazem ast."; return 1; }
+  rth_read email "aimil baraye Let's Encrypt (khali = bedoon aimil): "
   warn "baraye grftn gvahi, nginx mvghtaan motevaghef mishavad (niaz be port 80 azad va DNS dorost $domain)."
   local was_active=0
   systemctl is-active --quiet nginx && { was_active=1; systemctl stop nginx; }
-  if certbot certonly --standalone --non-interactive --agree-tos \
-       -m "$email" -d "$domain"; then
+  local cargs=(certonly --standalone --non-interactive --agree-tos -d "$domain")
+  if [ -n "$email" ]; then cargs+=(-m "$email"); else cargs+=(--register-unsafely-without-email); fi
+  if certbot "${cargs[@]}"; then
     log "gvahi grfth shod: /etc/letsencrypt/live/$domain/"
     [ "$was_active" -eq 1 ] && systemctl start nginx || true
     return 0
@@ -1035,7 +1035,7 @@ cmd_game_cert(){
   [ -n "$sni" ] || die "estefade: ratholectl game cert <sni>"
   command -v certbot >/dev/null 2>&1 || die "certbot nasb nist."
   warn "niaz: DNS $sni be hamin server asharh konad va port 80 azad bashad."
-  local email; read -rp "aimil Let's Encrypt (khali=bedoon aimil): " email
+  local email; rth_read email "aimil Let's Encrypt (khali=bedoon aimil): "
   local args=(certonly --standalone --non-interactive --agree-tos -d "$sni")
   if [ -n "$email" ]; then args+=(-m "$email"); else args+=(--register-unsafely-without-email); fi
   if certbot "${args[@]}"; then
