@@ -706,6 +706,12 @@ def mock_run(server, cmd_args):
         return {"rc": 0, "out": "──────── faalsazi halat noise rooye node kharej ────────\n"
                 "  ratholenode noise on 5.202.4.40:2334 Qm9ndXNMb2NrS2V5RXhhbXBsZUJhc2U2NFBhZGRpbmc= Noise_NK_25519_ChaChaPoly_BLAKE2s\n"
                 "bazgsht: ratholenode noise off", "err": ""}
+    if j == "ratholectl plain status":
+        return {"rc": 0, "out": "plain (bedoon TLS): roshan  listener HTTP rooye port 8880\n"
+                "  gvshdadn TCP:8880: blh", "err": ""}
+    if j == "ratholectl direct status":
+        return {"rc": 0, "out": "direct-IP (header-based): roshan   port 8081   header: X-Cdn-Id\n"
+                "  gvshdadn TCP:8081: blh\n  node-ha:  trk01 -> \"X-Cdn-Id: trk01\"", "err": ""}
     return {"rc": 0, "out": "[mock] %s → %s" % (role, j), "err": ""}
 
 
@@ -791,6 +797,26 @@ def parse_game_ls(text):
                         "inbound": p[3] if len(p) > 3 else ""})
     return out
 
+
+def parse_plain_status(text):
+    # khorooji-ye "ratholectl plain status" → enabled/port. (ingress: masir-e ws bedoon TLS)
+    text = text or ""
+    enabled = "roshan" in text
+    port = None
+    m = re.search(r"port\s+(\d+)", text)
+    if m: port = m.group(1)
+    return {"enabled": enabled, "port": port}
+
+def parse_direct_status(text):
+    # khorooji-ye "ratholectl direct status" → enabled/port/header. (ingress: header-routing bedoon TLS)
+    text = text or ""
+    enabled = "roshan" in text
+    port = None; header = None
+    m = re.search(r"port\s+(\d+)", text)
+    if m: port = m.group(1)
+    m = re.search(r"header[:：]\s+([A-Za-z0-9-]+)", text)
+    if m: header = m.group(1)
+    return {"enabled": enabled, "port": port, "header": header or "X-Cdn-Id"}
 
 def parse_doctor(text):
     # alave bar shomaresh OK/FAIL, vaziat har node ra ham darmiavarad
@@ -1168,6 +1194,8 @@ class Handler(BaseHTTPRequestHandler):
             ov["nodes"] = parse_iran_ls(r.get("out", ""))
             ov["kcp"] = parse_kcp_status(R(["ratholectl", "kcp", "status"]).get("out", ""))
             ov["noise"] = parse_noise_status(R(["ratholectl", "noise", "status"]).get("out", ""))
+            ov["plain"] = parse_plain_status(R(["ratholectl", "plain", "status"]).get("out", ""))
+            ov["direct"] = parse_direct_status(R(["ratholectl", "direct", "status"]).get("out", ""))
             ov["game"] = parse_game_ls(R(["ratholectl", "game", "ls"]).get("out", ""))
             ov["health"] = parse_doctor(R(["ratholectl", "doctor"]).get("out", ""))
         else:
@@ -1380,6 +1408,39 @@ UI_HTML = r"""<!doctype html><html lang="fa" dir="rtl"><head><meta charset="utf-
  .lw-ws{border-color:var(--t-ws)} .lw-kcp{border-color:var(--t-kcp);border-top-style:dashed}
  .lw-noise{border-color:var(--t-noise);border-top-style:dotted} .lw-plain{border-color:var(--t-plain);border-top-style:dashed}
  .lw-bad{border-color:var(--rd);border-top-style:dashed}
+ /* ---- routing console (interactive: vorodi → router → khorooji) ---- */
+ .rc{display:flex;flex-direction:column;gap:14px;margin-top:12px}
+ .rcard{background:var(--panel);border:1px solid var(--line);border-radius:var(--rad);overflow:hidden}
+ .rc-head{display:flex;align-items:center;gap:10px;padding:11px 15px;background:var(--panel2);border-bottom:1px solid var(--line);flex-wrap:wrap}
+ .rc-head .nm{font-weight:700;font-size:15px} .rc-head .hst{color:var(--mut);font-size:12.5px;font-family:var(--mono)}
+ .rc-body{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.4fr);gap:0}
+ .rc-col{padding:13px 15px;min-width:0} .rc-col+.rc-col{border-inline-start:1px solid var(--line)}
+ .rc-col>h5{margin:0 0 4px;font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:var(--mut);display:flex;align-items:center;gap:7px}
+ .rc-col>h5 .cnt{background:var(--panel3);border-radius:20px;padding:1px 8px;font-size:11px;letter-spacing:0;color:var(--tx)}
+ .rc-sub{color:var(--mut);font-size:11.5px;margin:0 0 10px}
+ /* lane = yek masir-e vorodi (chegoonegi-ye vorood-e karbar) */
+ .lane{border:1px solid var(--line);border-radius:10px;padding:9px 11px;margin-bottom:8px;background:var(--bg)}
+ .lane.on{border-color:color-mix(in srgb,var(--lanec) 55%,var(--line));box-shadow:inset 3px 0 0 var(--lanec)}
+ .lane .lh{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+ .lane .lh .lt{font-weight:600;font-size:13px} .lane .lh .lp{font-family:var(--mono);font-size:12px;color:var(--mut)}
+ .lane .ld{color:var(--mut);font-size:11.5px;margin-top:3px;line-height:1.5}
+ .lane .lact{margin-inline-start:auto;display:flex;gap:5px;flex-wrap:wrap}
+ .ldot{width:8px;height:8px;border-radius:50%;background:var(--lanec);flex-shrink:0;box-shadow:0 0 0 3px color-mix(in srgb,var(--lanec) 22%,transparent)}
+ .lane.off .ldot{background:var(--mut);box-shadow:none;opacity:.5}
+ .lane-tls{--lanec:var(--gr)} .lane-plain{--lanec:var(--t-plain)} .lane-direct{--lanec:var(--yl)} .lane-sni{--lanec:var(--t-noise)}
+ /* khorooji = node ba recipe-haye ettesal */
+ .onode{border:1px solid var(--line);border-radius:10px;margin-bottom:9px;overflow:hidden}
+ .onode.off{opacity:.55}
+ .onode .oh{display:flex;align-items:center;gap:8px;padding:8px 11px;background:var(--panel2);flex-wrap:wrap}
+ .onode .oh .onm{font-weight:600;font-size:13px} .onode .oh .otr{margin-inline-start:auto}
+ .recipe{border-top:1px solid var(--line);padding:8px 11px;display:flex;flex-direction:column;gap:3px;font-family:var(--mono);font-size:12px}
+ .recipe:first-of-type{border-top:0}
+ .recipe .rl{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+ .recipe .rl .k{color:var(--mut);min-width:64px;font-size:11px} .recipe .rl .v{color:var(--tx);word-break:break-all}
+ .recipe .rtag{font-size:10.5px;font-weight:700;padding:1px 8px;border-radius:20px;letter-spacing:.03em}
+ .recipe .cpy{margin-inline-start:auto;background:transparent;border:1px solid var(--line);color:var(--mut);padding:3px 9px;font-size:11px;border-radius:7px}
+ .recipe .cpy:hover{color:var(--tx);border-color:var(--ac)}
+ .rc-empty{color:var(--mut);font-size:12.5px;padding:10px 2px}
  /* ---- modal ---- */
  .modal{position:fixed;inset:0;background:rgba(0,0,0,.55);display:none;align-items:center;justify-content:center;z-index:50}.mbox{background:#0f1720;border:1px solid #2b3a4a;border-radius:12px;padding:18px;min-width:320px;max-width:90vw;max-height:85vh;overflow:auto}.mbox h3{margin:0 0 12px}.mbox .row{display:flex;gap:8px;align-items:center;margin:8px 0;flex-wrap:wrap}.mbox label{min-width:120px;color:#9fb3c8}.mbox input,.mbox select{background:#0b1219;border:1px solid #2b3a4a;color:#e6eef7;border-radius:8px;padding:6px 8px}.mbox table{width:100%;border-collapse:collapse;font-size:12px}.mbox td,.mbox th{border-bottom:1px solid #22303c;padding:4px 6px;text-align:start}
  /* ---- mobile ---- */
@@ -1392,6 +1453,8 @@ UI_HTML = r"""<!doctype html><html lang="fa" dir="rtl"><head><meta charset="utf-
   .sfoot{margin:0;margin-inline-start:auto;flex-direction:row;align-items:center;border-top:0;padding:0 4px;gap:6px;flex-shrink:0}
   .sfoot .clock{display:none}
   main#page{padding:12px}
+  .rc-body{grid-template-columns:1fr}
+  .rc-col+.rc-col{border-inline-start:0;border-top:1px solid var(--line)}
  }
 </style></head><body>
 <div id="app"></div>
@@ -1478,6 +1541,24 @@ const DICT={
   view_graph:'graph',view_table:'jadval',
   c_tunnel:'tunnel',c_status:'vaziat',c_upstream:'upstream',c_iran:'server Iran',c_node:'node',
   tun_up:'tunnel vasl',tun_down:'tunnel ghat',
+  view_console:'konsol',rc_pick_iran:'aval yek server-e Iran ezafe kon.',rc_unreach:'server dar dastras nist (SSH).',
+  rc_ingress:'vorodi-ha (karbar chegoone vasl mishavad)',rc_ingress_sub:'har masir yek ravesh-e vorood-e karbar ast — mostaghel az transport-e tunnel.',
+  rc_outputs:'khorooji-ha (node-ha)',rc_outputs_sub:'har node backend ast; transport-e reverse-tunnel-esh joda az ravesh-e vorood-e karbar ast.',
+  rc_no_nodes:'rooye in server node-i nist.',
+  ing_tls_t:'masir + TLS (443)',ing_tls_p:'wss://<domain>:443/<node>',
+  ing_tls_d:'pishfarz. karbar ba WebSocket+TLS rooye 443 vasl mishavad; node ba path route mishavad.',
+  ing_plain_t:'plain (ws bedoon TLS)',ing_plain_p:'ws://<ip>:<port>/<node>',
+  ing_plain_d:'listener-e HTTP-e sade rooye port-e joda. karbar bedoon TLS ba path route mishavad.',
+  ing_direct_t:'direct — masiryabi ba header (bedoon TLS)',ing_direct_p:'ws://<ip>:<port>  +  <header>: <node>',
+  ing_direct_d:'listener-e HTTP-e sade; node NA ba path balke ba header entekhab mishavad. daghighan halat-e "TCP bedoon PF/TLS + header".',
+  ing_sni_t:'game / SNI (443 passthrough)',ing_sni_d:'agar node-i SNI dashte bashad, 443 be halat-e L4/SNI miravad va TLS rooye node terminate mishavad.',
+  rc_on:'roshan',rc_off:'khamoosh',rc_enable:'roshan kon',rc_disable:'khamoosh',rc_edit:'virayesh',
+  rc_recipe:'recipe-e ettesal-e karbar',rc_via:'az tarigh',rc_copy:'copy',rc_copied:'copy shod',
+  rc_transport:'transport-e tunnel',rc_reach:'chegoone karbar be in node mireside',
+  rc_addr:'address',rc_port:'port',rc_wspath:'ws path',rc_wshost:'ws Host',rc_header:'header',rc_tls:'TLS',
+  rc_yes:'bale',rc_no:'kheyr',rc_hosthint:'har domain-e bikhatar (decoy)',
+  rc_off_hint:'in vorodi khamoosh ast — baraye didane recipe roshan-esh kon.',
+  rc_legend:'transport = tunnel-e node be Iran · ingress = vorood-e karbar',
   hub_box:'server-e hub',hs_up:'uptime',hs_load:'load',hs_mem:'RAM',hs_disk:'disk azad',
   nd_up:'faal',nd_down:'ghat',e_bad:'edge ghermez = node vasl nist (doctor)',
  },
@@ -1552,6 +1633,24 @@ const DICT={
   view_graph:'Graph',view_table:'Table',
   c_tunnel:'Tunnel',c_status:'Status',c_upstream:'Upstream',c_iran:'Iran server',c_node:'Node',
   tun_up:'tunnel up',tun_down:'tunnel down',
+  view_console:'Console',rc_pick_iran:'Add an Iran server first.',rc_unreach:'Server unreachable (SSH).',
+  rc_ingress:'Ingress (how the user connects)',rc_ingress_sub:'Each lane is one way a user enters — independent of the tunnel transport.',
+  rc_outputs:'Outputs (nodes)',rc_outputs_sub:'Each node is a backend; its reverse-tunnel transport is separate from how the user enters.',
+  rc_no_nodes:'No nodes on this server.',
+  ing_tls_t:'Path + TLS (443)',ing_tls_p:'wss://<domain>:443/<node>',
+  ing_tls_d:'Default. User connects over WebSocket+TLS on 443; the node is chosen by path.',
+  ing_plain_t:'Plain (ws, no TLS)',ing_plain_p:'ws://<ip>:<port>/<node>',
+  ing_plain_d:'Bare HTTP listener on a separate port. User connects without TLS, routed by path.',
+  ing_direct_t:'Direct — header routing (no TLS)',ing_direct_p:'ws://<ip>:<port>  +  <header>: <node>',
+  ing_direct_d:'Bare HTTP listener; the node is picked by a header, not the path. Exactly the "TCP, no PF/TLS + header" case.',
+  ing_sni_t:'Game / SNI (443 passthrough)',ing_sni_d:'If any node has an SNI, 443 switches to L4/SNI mode and TLS terminates on the node.',
+  rc_on:'on',rc_off:'off',rc_enable:'Enable',rc_disable:'Disable',rc_edit:'Edit',
+  rc_recipe:'User connection recipe',rc_via:'via',rc_copy:'copy',rc_copied:'copied',
+  rc_transport:'Tunnel transport',rc_reach:'How a user reaches this node',
+  rc_addr:'address',rc_port:'port',rc_wspath:'ws path',rc_wshost:'ws Host',rc_header:'header',rc_tls:'TLS',
+  rc_yes:'yes',rc_no:'no',rc_hosthint:'any harmless domain (decoy)',
+  rc_off_hint:'This ingress is off — enable it to see the recipe.',
+  rc_legend:'transport = node→Iran tunnel · ingress = user entry',
   hub_box:'Hub server',hs_up:'uptime',hs_load:'load',hs_mem:'RAM',hs_disk:'disk free',
   nd_up:'up',nd_down:'down',e_bad:'red edge = node not connected (doctor)',
  }
@@ -1938,7 +2037,7 @@ function renderNode(n,ov){
 // ---------- safhe: routing (graph-e topology, SVG dasti bedoon lib) ----------
 let _gTimer=null,_gDragging=false;
 let GVIEW=localStorage.getItem('rh_gview')||'graph';     // namaye routing: graph|table
-function scheduleGraph(){clearTimeout(_gTimer);_gTimer=setTimeout(()=>{if(ROUTE.page==='routing'&&!_gDragging)drawGraph();},150);}
+function scheduleGraph(){clearTimeout(_gTimer);_gTimer=setTimeout(()=>{if(ROUTE.page==='routing'&&!_gDragging){if(GVIEW==='console')drawConsole();else drawGraph();}},150);}
 function setGView(v){GVIEW=v;localStorage.setItem('rh_gview',v);renderRouting();}
 // tartib-e dasti-e box-ha (drag): dar localStorage mimanad
 function gOrder(col){try{return JSON.parse(localStorage.getItem('rh_gorder_'+col)||'[]');}catch(e){return[];}}
@@ -1951,8 +2050,10 @@ function gApplyOrder(names,col){ // sort-e stable: avval tartib-e save-shode, ba
 }
 function renderRouting(){
  const pg=$('page'); if(!pg)return;
+ const isC=GVIEW==='console';
  pg.innerHTML=`<div class="ptitle"><h2>${t('nav_routing')}</h2><span style="flex:1"></span>
-   <div class="vswitch"><button class="${GVIEW==='graph'?'on':''}" onclick="setGView('graph')">◈ ${t('view_graph')}</button>
+   <div class="vswitch"><button class="${GVIEW==='console'?'on':''}" onclick="setGView('console')">⚡ ${t('view_console')}</button>
+   <button class="${GVIEW==='graph'?'on':''}" onclick="setGView('graph')">◈ ${t('view_graph')}</button>
    <button class="${GVIEW==='table'?'on':''}" onclick="setGView('table')">☰ ${t('view_table')}</button></div>
    ${GVIEW==='graph'?`<button class="gh" onclick="gResetOrder()">${t('g_reset')}</button>`:''}
    <button class="gh" onclick="pollByPage()">${t('refresh')}</button></div>
@@ -1962,11 +2063,106 @@ function renderRouting(){
    <span class="li"><span class="lw lw-noise"></span> noise</span>
    <span class="li"><span class="lw lw-plain"></span> plain</span>
    <span class="li"><span class="lw lw-bad"></span> ${t('e_bad')}</span></div>`:''}
-  <div class="gwrap" id="gwrap"></div>
-  <div class="sub" style="margin-top:8px">${GVIEW==='graph'?(t('g_hint')+' '+t('g_drag')):t('g_hint')}</div>`;
- drawGraph();
+  ${isC?`<div class="rc" id="rcwrap"></div>`:`<div class="gwrap" id="gwrap"></div>
+  <div class="sub" style="margin-top:8px">${GVIEW==='graph'?(t('g_hint')+' '+t('g_drag')):t('g_hint')}</div>`}`;
+ if(isC)drawConsole(); else drawGraph();
  SERVERS.forEach(s=>{if(!OVS[s.name])loadOv(s.name);});
 }
+// ---------- namaye console: vorodi (ingress) → router → khorooji (node) ----------
+// ravesh-haye vorood-e karbar (ingress) mostaghel az transport-e reverse-tunnel-e node.
+function ingressLanes(ov){
+ const p=ov.plain||{},d=ov.direct||{},g=(ov.game||[]);
+ return [
+  {key:'tls',cls:'lane-tls',on:true,edit:null,title:t('ing_tls_t'),patt:t('ing_tls_p'),desc:t('ing_tls_d'),port:'443'},
+  {key:'direct',cls:'lane-direct',on:!!d.enabled,editFn:'directOnIran',offAct:'direct_off',
+   title:t('ing_direct_t'),patt:t('ing_direct_p'),desc:t('ing_direct_d'),port:d.port,header:d.header||'X-Cdn-Id'},
+  {key:'plain',cls:'lane-plain',on:!!p.enabled,editFn:'plainOnIran',offAct:'plain_off',
+   title:t('ing_plain_t'),patt:t('ing_plain_p'),desc:t('ing_plain_d'),port:p.port},
+  {key:'sni',cls:'lane-sni',on:g.length>0,edit:null,title:t('ing_sni_t'),patt:'',desc:t('ing_sni_d'),count:g.length}
+ ];
+}
+function laneHtml(n,ln){
+ const st=ln.on?`<span class="badge b-ok">${t('rc_on')}</span>`:`<span class="badge b-bad">${t('rc_off')}</span>`;
+ let act='';
+ if(ln.editFn){
+  act=`<button class="gh" onclick="${ln.editFn}('${h(n)}')">${ln.on?t('rc_edit'):t('rc_enable')}</button>`;
+  if(ln.on&&ln.offAct)act+=`<button class="r" onclick="run('${h(n)}','${ln.offAct}')">${t('rc_disable')}</button>`;
+ }
+ const meta=(ln.port?` <span class="lp">:${h(ln.port)}</span>`:'')+(ln.header?` <span class="lp">${h(ln.header)}</span>`:'')
+   +(ln.count!=null&&ln.key==='sni'?` <span class="lp">${ln.count} SNI</span>`:'');
+ return `<div class="lane ${ln.cls} ${ln.on?'on':'off'}">
+   <div class="lh"><span class="ldot"></span><span class="lt">${h(ln.title)}</span>${meta}${st}
+    <span class="lact">${act}</span></div>
+   ${ln.patt?`<div class="lh" style="margin-top:5px"><span class="lp">${h(ln.patt)}</span></div>`:''}
+   <div class="ld">${h(ln.desc)}</div></div>`;
+}
+// recipe-ha: baraye har node, chegoone karbar (Xray/V2Ray) be an vasl mishavad — bar asas-e ingress-e roshan.
+function iranDomain(iran,ov){
+ const nn=(ov.nodes||[]);
+ for(const d of nn){const m=/^https?:\/\/([^\/]+)/.exec(d.path||'');if(m)return m[1].replace(/:\d+$/,'');}
+ return (fnd(iran).host)||'<domain>';
+}
+function nodeRecipes(iran,ov,node){
+ const host=(fnd(iran).host)||'<IRAN_IP>',dom=iranDomain(iran,ov);
+ const p=ov.plain||{},d=ov.direct||{};
+ const out=[];
+ out.push({tag:'ws/443',cls:'b-ws',lines:[[t('rc_addr'),dom],[t('rc_port'),'443'],[t('rc_wspath'),'/'+node.name],[t('rc_tls'),t('rc_yes')]]});
+ if(d.enabled){out.push({tag:'direct',cls:'b-plain',lines:[[t('rc_addr'),host],[t('rc_port'),d.port||'8081'],
+   [t('rc_wshost'),'myket.ir  ('+t('rc_hosthint')+')'],[t('rc_header'),(d.header||'X-Cdn-Id')+': '+node.name],[t('rc_tls'),t('rc_no')]]});}
+ if(p.enabled){out.push({tag:'plain',cls:'b-plain',lines:[[t('rc_addr'),host],[t('rc_port'),p.port||'8880'],
+   [t('rc_wspath'),'/'+node.name],[t('rc_tls'),t('rc_no')]]});}
+ return out;
+}
+function recipeCopyText(node,r){return node+' · '+r.tag+'\\n'+r.lines.map(l=>l[0]+': '+l[1]).join('\\n');}
+function drawConsole(){
+ const w=$('rcwrap'); if(!w)return;
+ const irans=SERVERS.filter(s=>s.role==='iran');
+ if(!irans.length){w.innerHTML=`<div class="rc-empty">${t('rc_pick_iran')}</div>`;return;}
+ let x='';
+ irans.forEach(s=>{
+  const ov=OVS[s.name];
+  x+=`<div class="rcard"><div class="rc-head">
+    <span class="dot ${ov?ovDotCls(s.name,ov):'d-un'}"></span>
+    <span class="nm">${h(s.name)}</span><span class="hst">${h(s.host)}</span>
+    <span style="flex:1"></span><span class="sub" style="font-size:11px">${t('rc_legend')}</span>
+    <button class="gh" onclick="nav('#/server/${h(s.name)}')">${t('details')}</button></div>`;
+  if(!ov){x+=`<div class="rc-empty" style="padding:14px">${t('loading')}</div></div>`;return;}
+  if(ov.reachable===false){x+=`<div class="rc-empty" style="padding:14px"><span class="badge b-bad">${t('rc_unreach')}</span></div></div>`;return;}
+  const lanes=ingressLanes(ov),nodes=ov.nodes||[];
+  x+=`<div class="rc-body">
+    <div class="rc-col"><h5>${t('rc_ingress')} <span class="cnt">${lanes.filter(l=>l.on).length}/${lanes.length}</span></h5>
+      <p class="rc-sub">${t('rc_ingress_sub')}</p>${lanes.map(l=>laneHtml(s.name,l)).join('')}</div>
+    <div class="rc-col"><h5>${t('rc_outputs')} <span class="cnt">${nodes.length}</span></h5>
+      <p class="rc-sub">${t('rc_outputs_sub')}</p>`;
+  if(!nodes.length)x+=`<div class="rc-empty">${t('rc_no_nodes')}</div>`;
+  else{
+   const nn=(ov.noise||{}).nodes||[],hn=(ov.health||{}).nodes||{};
+   nodes.forEach(d=>{
+    const isN=nn.indexOf(d.name)>=0,tr=isN?'noise':((ov.kcp||{}).enabled?'kcp':'ws');
+    const trb=tr==='noise'?'b-noise':(tr==='kcp'?'b-kcp':'b-ws');
+    const st=hn[d.name],dot=st?`<span class="dot ${st==='ok'?'d-ok':'d-bad'}"></span>`:'<span class="dot d-un"></span>';
+    const recs=nodeRecipes(s.name,ov,d);
+    x+=`<div class="onode ${st==='warn'?'off':''}"><div class="oh">${dot}<span class="onm">${h(d.name)}</span>
+      <span class="sub" style="font-size:11px">${t('rc_transport')}:</span><span class="badge ${trb}">${tr}</span>
+      <span class="otr sub" style="font-size:11px">→ :${h(d.port)}</span></div>`;
+    recs.forEach((r,i)=>{
+     const rid='rec_'+h(s.name)+'_'+h(d.name)+'_'+i;
+     x+=`<div class="recipe"><div class="rl"><span class="rtag badge ${r.cls}">${t('rc_via')} ${h(r.tag)}</span>
+       <button class="cpy" onclick="copyRecipe('${rid}')">⧉ ${t('rc_copy')}</button></div>
+       <div id="${rid}" data-cp="${h(recipeCopyText(d.name,r))}">`;
+     r.lines.forEach(l=>{x+=`<div class="rl"><span class="k">${h(l[0])}</span><span class="v">${h(l[1])}</span></div>`;});
+     x+=`</div></div>`;
+    });
+    x+=`</div>`;
+   });
+  }
+  x+=`</div></div></div>`;
+ });
+ w.innerHTML=x;
+}
+function copyRecipe(id){const el=$(id);if(!el)return;const txt=(el.getAttribute('data-cp')||'').replace(/\\n/g,'\n');
+ navigator.clipboard&&navigator.clipboard.writeText(txt);toast(t('rc_copied'));}
+
 // ---------- namaye jadval: har edge yek radif ----------
 function drawRouteTable(){
  const w=$('gwrap'); if(!w)return;

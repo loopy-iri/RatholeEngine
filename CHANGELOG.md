@@ -9,6 +9,15 @@ release.yml hamin bakhsh ra be onvan-e title/body-e GitHub Release montasher mik
 
 ## [Unreleased]
 
+## [1.4.0] - 2026-07-15
+
+### Added
+- **Hub:** namaye **konsol** dar safhe-ye masirha — vorodi-ha (ingress: TLS/443, direct-IP, plain, game/SNI) mostaghel az khorooji-ha (node-ha) namayesh dade mishavand; har node recipe-haye ettesal-e karbar (ws/443، direct، plain) ba dokme-ye copy darad
+- **Hub:** parse-e `ratholectl plain status` / `direct status` dar overview (vaziat-e roshan/khamoosh + port + header)
+
+### Changed
+- **ratholectl:** helper-e `detect_ip` ba `--connect-timeout`/`--max-time`-e kootah baraye `api.ipify` (rooye Iran aksaran filter → curl hang mishod va SSH-e hub timeout midad)؛ fallback be `hostname -I` va override ba `RATHOLE_PUBLIC_IP`
+
 ## [1.3.0] - 2026-07-15
 
 ### Added

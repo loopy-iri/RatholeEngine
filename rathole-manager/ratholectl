@@ -40,6 +40,20 @@ ask_yn(){ local p="$1" a; read -rp "$p [y/N]: " a; [[ "$a" =~ ^[Yy]$ ]]; }
 need_root(){ [ "$(id -u)" -eq 0 ] || die "bayad ba root ejra shavad (sudo)."; }
 need_bin(){ command -v "$1" >/dev/null 2>&1 || die "niaz be '$1' ast; aval install-panel.sh ra ejra kon."; }
 
+# ---------- tashkhis-e IP-e omomi-ye server (ba timeout-e kootah) ----------
+# MOHEM: rooye Iran api.ipify aksaran filter ast; bedoon --max-time curl ~2 daghighe hang
+# mishavad va SSH-e hub (masalan "plain show"/"direct show") timeout midahad. hamishe local-IP
+# fallback darim ta print_*_connect faran bargardad. RATHOLE_PUBLIC_IP override-e dasti ast.
+detect_ip(){
+  if [ -n "${RATHOLE_PUBLIC_IP:-}" ]; then printf '%s' "$RATHOLE_PUBLIC_IP"; return; fi
+  local ip=""
+  if command -v curl >/dev/null 2>&1; then
+    ip="$(curl -fsS4 --connect-timeout 2 --max-time 3 https://api.ipify.org 2>/dev/null)"
+  fi
+  [ -n "$ip" ] || ip="$(hostname -I 2>/dev/null | awk '{print $1}')"
+  printf '%s' "$ip"
+}
+
 ensure_state(){
   [ -f "$STATE" ] || die "hnvz init nashode. aval ejra kon: ratholectl init"
 }
@@ -1378,7 +1392,7 @@ print_kcp_connect(){
   local en; en="$(jq -r '.kcp.enabled // false' "$STATE" 2>/dev/null)"
   [ "$en" = true ] || { warn "kcp khamoosh ast; aval: ratholectl kcp on [port] [profile]"; return; }
   local ip port key prof
-  ip="$(curl -fsS4 https://api.ipify.org 2>/dev/null || hostname -I 2>/dev/null | awk '{print $1}')"
+  ip="$(detect_ip)"
   port="$(jq -r '.kcp.port' "$STATE")"; key="$(jq -r '.kcp.key' "$STATE")"; prof="$(jq -r '.kcp.profile // "balanced"' "$STATE")"
   echo
   echo "$(c_y '──────── faalsazi kcp rooye node kharej ────────')"
@@ -1550,7 +1564,7 @@ print_plain_connect(){
   local pp; pp="$(jq -r '.plain_port // empty' "$STATE" 2>/dev/null)"
   [ -n "$pp" ] && [ "$pp" != null ] || { warn "plain khamoosh ast; aval: ratholectl plain on [port]"; return; }
   local ip
-  ip="$(curl -fsS4 https://api.ipify.org 2>/dev/null || hostname -I 2>/dev/null | awk '{print $1}')"
+  ip="$(detect_ip)"
   echo
   echo "$(c_y '──────── faalsazi halat plain (bedoon TLS) rooye node kharej ────────')"
   echo "rooye node in ra bezan (masir tunnel az TLS/443 be ws-e sade switch mishavad):"
@@ -1617,7 +1631,7 @@ print_direct_connect(){
   dp="$(jq -r '.direct_port // empty' "$STATE" 2>/dev/null)"
   [ -n "$dp" ] && [ "$dp" != null ] || { warn "direct khamoosh ast; aval: ratholectl direct on"; return; }
   dh="$(jq -r '.direct_header // "X-Cdn-Id"' "$STATE" 2>/dev/null)"; case "$dh" in ''|null) dh="X-Cdn-Id" ;; esac
-  ip="$(curl -fsS4 https://api.ipify.org 2>/dev/null || hostname -I 2>/dev/null | awk '{print $1}')"
+  ip="$(detect_ip)"
   name="${1:-}"
   if [ -n "$name" ]; then
     jq -e --arg n "$name" '.nodes[]|select(.name==$n)' "$STATE" >/dev/null 2>&1 || die "node '$name' peyda nashod."
@@ -1743,7 +1757,7 @@ print_noise_connect(){
   [ -n "$np" ] && [ "$np" != null ] || { warn "noise khamoosh ast; aval: ratholectl noise on [port]"; return; }
   pub="$(jq -r '.noise_pubkey // empty' "$STATE" 2>/dev/null)"
   pat="$(jq -r '.noise_pattern // empty' "$STATE" 2>/dev/null)"; [ -n "$pat" ] && [ "$pat" != null ] || pat="$NOISE_PATTERN_DEFAULT"
-  ip="$(curl -fsS4 https://api.ipify.org 2>/dev/null || hostname -I 2>/dev/null | awk '{print $1}')"
+  ip="$(detect_ip)"
   echo
   echo "$(c_y '──────── faalsazi halat noise (ramznegari-shode) rooye node kharej ────────')"
   echo "rooye node in ra bezan (masir tunnel ba Noise ramznegari mishavad — bedoon TLS/cert):"
