@@ -9,6 +9,9 @@ release.yml hamin bakhsh ra be onvan-e title/body-e GitHub Release montasher mik
 
 ## [Unreleased]
 
+### Added
+- **ratholectl — dstvr-e nasb-e node be shekl-e curl yek-khatti:** baad az `ratholectl add <name> <inbound>` (va `ratholectl token <name>`) alaan **avval** dstvr-e amade-ye `curl -fsSL …/install.sh | sudo bash -s -- --node -- --server <panel>:443 --name … --token … --inbound-port …` chap mishavad (ba field-haye por-shode az state)، sps shekl-e mahalli-ye `install-node.sh`. agar domain khali bashad (halat IP-tunnel)، `--server` ba IP-e omomi (`detect_ip`) por mishavad. slug/ref az `RATHOLE_GH`/`RATHOLE_REF` (pishfarz `loopy-iri/RatholeEngine` + `main`). dar hub ham chon in khorooji chand-khatti-ye `add_node` dar `outModal` (ba dokme-ye copy) neshan dade mishavad، mostaghim ghabel-e kopy ast
+
 ### Fixed
 - **hub — node bedoon tunnel-e asli (`?`):** vaghti node az tarigh-e hub nasb/provision mishod, server-e Iran be onvan tunnel-e **main** set nemishod va dar safhe-ye node khali/`?` mimond. hala: (1) form-e «nasb khodkar» yek select-e «server Iran» darad ke baad az deploy khodkar `ratholenode set SERVER <iran>:443` ra ejra mikonad (agar faghat yek server Iran bashad، hamon entekhab mishavad)؛ (2) dar safhe-ye har node dokme-ye jadid **«tanzim tunnel asli»** ejaze midahad node-haye mojood ra be yek server Iran vasl koni. amal-e `set_server` dar hub ba regex etebarsanji va be sorat-e argv ejra mishavad (bedoon interpolation)
 

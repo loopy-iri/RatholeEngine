@@ -814,18 +814,31 @@ regenerate(){
 print_node_install(){
   need_bin jq; ensure_state
   local name="$1" domain ctrl node token inbound aib at
+  local gh="${RATHOLE_GH:-loopy-iri/RatholeEngine}" ref="${RATHOLE_REF:-main}"
   domain="$(s_get '.domain')"
   node="$(jq -c --arg n "$name" '.nodes[]|select(.name==$n)' "$STATE")"
   [ -n "$node" ] || die "node '$name' peyda nashod."
   token="$(echo "$node" | jq -r '.token')"
   inbound="$(echo "$node" | jq -r '.inbound_port')"
-  echo
-  echo "$(c_y '──────── dstvr nasb rooye node kharej ────────')"
-  printf 'sudo bash install-node.sh --server %s:443 --name %s \\\n' "$domain" "$name"
-  printf '     --token %s --inbound-port %s' "$token" "$inbound"
+  # agar domain khali bood (halat IP-tunnel), IP-e omomi ya placeholder ra bezar
+  local server_addr="${domain}"
+  [ -n "$server_addr" ] || server_addr="$(detect_ip 2>/dev/null)"
+  [ -n "$server_addr" ] || server_addr='<IRAN-IP-YA-DOMAIN>'
   aib="$(echo "$node" | jq -r '.api_inbound_port // empty')"
+  [ -n "$aib" ] && at="$(echo "$node" | jq -r '.api_token')"
+
+  echo
+  echo "$(c_y '──────── dstvr nasb rooye node kharej (curl yek-khatti) ────────')"
+  printf 'curl -fsSL https://raw.githubusercontent.com/%s/%s/install.sh | sudo bash -s -- --node -- \\\n' "$gh" "$ref"
+  printf '  --server %s:443 --name %s --token %s --inbound-port %s' "$server_addr" "$name" "$token" "$inbound"
   if [ -n "$aib" ]; then
-    at="$(echo "$node" | jq -r '.api_token')"
+    printf ' \\\n  --api-token %s --api-inbound-port %s' "$at" "$aib"
+  fi
+  echo
+  echo "$(c_y '──────── ya ba baste-ye mahalli (install-node.sh) ────────')"
+  printf 'sudo bash install-node.sh --server %s:443 --name %s \\\n' "$server_addr" "$name"
+  printf '     --token %s --inbound-port %s' "$token" "$inbound"
+  if [ -n "$aib" ]; then
     printf ' \\\n     --api-token %s --api-inbound-port %s' "$at" "$aib"
     echo
     local alp; alp="$(echo "$node" | jq -r '.api_local_port')"
@@ -2135,7 +2148,7 @@ dstvrha:
   regen                        baztolid configha va reload
   backup [file]                sakht backup az state (nodeha/tokenha)
   restore <file>               restore az backup + baztolid
-  token <name>                 chap dstvr nasb node
+  token <name>                 chap dstvr nasb node (curl yek-khatti + install-node.sh)
   doctor                       barresi slamt system va tmaiz sait fik/rthvl
   tune                         eemal BBR + limithaye system/nginx (rfa 502 zir burst)
   fakeweb <start|stop|rm|status> [port]   sait fik pishfarz rooye fake_port (rfa 502 rooye / dar srvrhai rlh)
