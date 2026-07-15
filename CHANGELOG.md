@@ -9,6 +9,9 @@ release.yml hamin bakhsh ra be onvan-e title/body-e GitHub Release montasher mik
 
 ## [Unreleased]
 
+### Fixed
+- **hub — node bedoon tunnel-e asli (`?`):** vaghti node az tarigh-e hub nasb/provision mishod, server-e Iran be onvan tunnel-e **main** set nemishod va dar safhe-ye node khali/`?` mimond. hala: (1) form-e «nasb khodkar» yek select-e «server Iran» darad ke baad az deploy khodkar `ratholenode set SERVER <iran>:443` ra ejra mikonad (agar faghat yek server Iran bashad، hamon entekhab mishavad)؛ (2) dar safhe-ye har node dokme-ye jadid **«tanzim tunnel asli»** ejaze midahad node-haye mojood ra be yek server Iran vasl koni. amal-e `set_server` dar hub ba regex etebarsanji va be sorat-e argv ejra mishavad (bedoon interpolation)
+
 ## [1.4.5] - 2026-07-16
 
 ### Added

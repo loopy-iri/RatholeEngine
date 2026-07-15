@@ -464,6 +464,11 @@ def build_node_cmd(action, a):
         return ["ratholenode", "upstream", "restart", uid]
     if action == "restart":
         return ["ratholenode", "restart"]
+    if action == "set_server":
+        # tunnel-e asli (main) ra be yek server Iran vasl mikonad: host ya host:port
+        server = a.get("server", "")
+        if not (RE_IPPORT.match(server) or RE_HOST.match(server)): return None
+        return ["ratholenode", "set", "SERVER", server]
     if action == "watchdog_on":
         iv = str(a.get("interval", "60") or "60")
         if not RE_PORT.match(iv): return None
@@ -516,7 +521,7 @@ WRITE_ACTIONS = {
 
     "backup", "enable", "regen_full", "regen",
     # node
-    "add_svc", "rm_svc", "kcp_on", "kcp_off", "apply", "restart",
+    "add_svc", "rm_svc", "kcp_on", "kcp_off", "apply", "restart", "set_server",
     "upstream_add", "upstream_add_svc", "upstream_rm", "upstream_rm_svc",
     "upstream_kcp_on", "upstream_kcp_off", "upstream_apply", "upstream_restart",
 
@@ -626,6 +631,21 @@ def provision_server(d):
     if any(s.get("name") == name for s in get_inventory()):
         return {"rc": 1, "out": "", "err": "in nam az ghabl vojood darad"}
     server = {"name": name, "role": role, "host": host, "ssh_user": user, "ssh_port": int(port)}
+    # baraye node: server-e Iran-e main ra moshakhas kon (vorodi iran_server ya, agar
+    # faghat yek server Iran dar hub bashad, hamon). in tunnel-e asli (SERVER) ra baad az
+    # deploy tanzim mikonad ta node digar «?» nashan nadahad.
+    iran_host = ""
+    if role == "node":
+        want = str(d.get("iran_server", "")).strip()
+        irs = [s for s in get_inventory() if s.get("role") == "iran"]
+        if want:
+            match = next((s for s in irs if s.get("name") == want or s.get("host") == want), None)
+            if match:
+                iran_host = str(match.get("host", ""))
+            elif RE_HOST.match(want):
+                iran_host = want
+        elif len(irs) == 1:
+            iran_host = str(irs[0].get("host", ""))
     if MOCK:
         update_inventory(lambda inv: inv + [server] if not any(s.get("name") == name for s in inv) else inv)
         return {"rc": 0, "out": "[mock provision→%s] kelid nصب shod + deploy + be hub ezafe shod" % name, "err": ""}
@@ -662,6 +682,13 @@ def provision_server(d):
     dep = deploy_to_server(server)
     logs.append("== deploy (github-update) ==\n" + (dep.get("out", "") or "") +
                 (("\n[stderr] " + dep.get("err", "")) if dep.get("err") else ""))
+    # 2.5) baraye node: tunnel-e asli (SERVER) ra be server-e Iran vasl kon ta «?» nashan nadahad
+    if role == "node" and iran_host and dep.get("rc") == 0:
+        sset = run_on_server(server, ["ratholenode", "set", "SERVER", iran_host + ":443"])
+        logs.append("== tunnel-e asli → %s:443 ==\n" % iran_host + (sset.get("out", "") or "") +
+                    (("\n[stderr] " + sset.get("err", "")) if sset.get("err") else ""))
+    elif role == "node" and not iran_host:
+        logs.append("== [هشدار] server Iran-e main tanzim nashod — dar safhe-ye node ba «tanzim tunnel asli» vaslesh kon. ==")
     # 3) sabt dar inventory (hata agar deploy naghes bood, kelid nصب shode va etesal ba kelid barقarار ast)
     # 3) sabt dar inventory (hata agar deploy naghes bood, kelid nصب shode va etesal ba kelid barقarار ast)
     update_inventory(lambda inv: inv + [server] if not any(s.get("name") == name for s in inv) else inv)
@@ -735,6 +762,8 @@ def mock_run(server, cmd_args):
     if j == "ratholectl direct status":
         return {"rc": 0, "out": "direct-IP (header-based): roshan   port 8081   header: X-Cdn-Id\n"
                 "  gvshdadn TCP:8081: blh\n  node-ha:  trk01 -> \"X-Cdn-Id: trk01\"", "err": ""}
+    if j.startswith("ratholenode set SERVER "):
+        return {"rc": 0, "out": "tanzim shod: SERVER = %s\n[mock] tunnel-e asli be-ruz shod." % cmd_args[-1], "err": ""}
     return {"rc": 0, "out": "[mock] %s → %s" % (role, j), "err": ""}
 
 
@@ -1518,6 +1547,7 @@ const DICT={
   game_svcs:'servicehaye game (SNI/443)',add_game:'+ game',get_cert:'greftan gvahi',no_game:'service game nadari.',
   c_data:'dade',c_node_inb:'inbound node',
   main_tunnel:'tunnel asli →',restart_tunnel:'restart tunnel',migrate:'naghshe mohajerat',
+  set_main:'tanzim tunnel asli',l_iran_srv:'server Iran',no_iran:'hich server Iran dar hub sabt nashode — aval yeki ezafe kon.',
   watchdog:'watchdog (restart khodkar):',wd_on:'roshan',wd_off:'khamoosh',wd_status:'vaziat',
   svc_tunnel:'servicehaye in tunnel',add_svc:'+ service',no_svc:'servisi nist.',c_svc:'service',
   upstreams:'serverhaye Iran-e digar (upstream)',add_up:'+ upstream',no_up:'upstream nadari (faghat yek Iran).',status:'status',del_up:'hazf upstream',cf_delup:'hazf upstream',cf_delupsvc:'hazf service az upstream',
@@ -1620,6 +1650,7 @@ const DICT={
   game_svcs:'Game services (SNI/443)',add_game:'+ game',get_cert:'Get certificate',no_game:'No game services.',
   c_data:'Data',c_node_inb:'Node inbound',
   main_tunnel:'Main tunnel →',restart_tunnel:'restart tunnel',migrate:'Migration map',
+  set_main:'Set main tunnel',l_iran_srv:'Iran server',no_iran:'No Iran server registered in the hub — add one first.',
   watchdog:'watchdog (auto restart):',wd_on:'On',wd_off:'Off',wd_status:'Status',
   svc_tunnel:'Services on this tunnel',add_svc:'+ service',no_svc:'No services.',c_svc:'Service',
   upstreams:'Other Iran servers (upstream)',add_up:'+ upstream',no_up:'No upstream (single Iran).',status:'status',del_up:'Remove upstream',cf_delup:'Remove upstream',cf_delupsvc:'Remove service from upstream',
@@ -1885,6 +1916,7 @@ function renderDashboard(){
    <input id="n" placeholder="${t('f_name')}" size="10"><select id="rl"><option value="iran">iran</option><option value="node">node</option></select>
    <input id="hh" placeholder="${t('f_host')}" size="14"><input id="uu" value="root" size="6"><input id="pp" value="22" size="4">
    <input id="sw" type="password" placeholder="${t('prov_pw')}" size="14">
+   <select id="isv" title="${t('l_iran_srv')}"><option value="">${t('l_iran_srv')}?</option>${iranSrvOptions()}</select>
    <button class="g" onclick="provSrv()">${t('prov_btn')}</button>
    <button class="gh" onclick="addSrv()">${t('add_btn')}</button></div>
    <div class="sub" style="margin-top:6px">${t('prov_hint')}</div></div></div>
@@ -2027,7 +2059,7 @@ function svcDot(name){
 
 function renderNode(n,ov){
  let s='<div id="det_'+n+'"></div>';
- s+=`<div class="sec"><h4>${t('main_tunnel')} ${esc(ov.main_server||'?')}</h4><div class="btns">
+ s+=`<div class="sec"><h4>${t('main_tunnel')} ${esc(ov.main_server||'?')} <button class="g" onclick="setMainSrv('${n}')">${t('set_main')}</button></h4><div class="btns">
    <button class="g" onclick="kcpOnNode('${n}')">${t('kcp_on')}</button>
    <button class="r" onclick="run('${n}','kcp_off')">${t('kcp_off')}</button>
    <button class="s" onclick="run('${n}','restart')">${t('restart_tunnel')}</button>
@@ -2486,7 +2518,7 @@ function copyText(id){const el=$(id);if(!el)return;const x=el.textContent;
  else{const r=document.createRange();r.selectNode(el);getSelection().removeAllRanges();getSelection().addRange(r);try{document.execCommand('copy');toast(t('copied'));}catch(e){toast('copy?');}}}
 async function addSrv(){const b={name:$('n').value,role:$('rl').value,host:$('hh').value,ssh_user:$('uu').value,ssh_port:$('pp').value};
  const {status,j}=await api('POST','api/servers',b); if(status!==200){toast('error: '+(j.error||status));return;} $('n').value='';$('hh').value=''; loadAll();}
-async function provSrv(){const b={name:$('n').value,role:$('rl').value,host:$('hh').value,ssh_user:$('uu').value,ssh_port:$('pp').value,ssh_password:$('sw').value};
+async function provSrv(){const b={name:$('n').value,role:$('rl').value,host:$('hh').value,ssh_user:$('uu').value,ssh_port:$('pp').value,ssh_password:$('sw').value,iran_server:($('isv')?$('isv').value:'')};
  if(!b.name||!b.host||!b.ssh_password){toast(t('fill'));return;}
  toast(t('provisioning'));
  const {status,j}=await api('POST','api/provision',b);
@@ -2644,6 +2676,19 @@ function noiseOnNode(n){formModal(t('t_noise_node'),noiseNodeFields(),
 
 // list-e serverhaye Iran (baraye autofill-e KCP)
 function iranServers(){return SERVERS.filter(s=>s.role==='iran');}
+// gozine-haye <option> baraye entekhab-e server Iran (host be onvan value)
+function iranSrvOptions(){return iranServers().map(s=>`<option value="${h(s.host)}">${h(s.name)} (${h(s.host)})</option>`).join('');}
+// tunnel-e asli (main) ye node ra be yek server Iran vasl kon (SERVER=host:443)
+function setMainSrv(n){
+ const irs=iranServers();
+ if(!irs.length){toast(t('no_iran'));return;}
+ const f=[{id:'iran',label:t('l_iran_srv'),type:'select',val:irs[0].host,
+   opts:irs.map(s=>({v:s.host,t:s.name+' ('+s.host+')'}))}];
+ formModal(t('set_main'),f,v=>{
+  const host=(v.iran||'').trim(); if(!host){toast(t('fill'));return;}
+  closeModal(); run(n,'set_server',{server:host+':443'});
+ });
+}
 // autofill: az server Iran-e entekhab-shode remote/key/profile-e daghigh ra migirad
 async function kcpAutofill(iranName){
  if(!iranName){return;}
