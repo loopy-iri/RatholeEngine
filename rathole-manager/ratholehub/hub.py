@@ -636,8 +636,10 @@ def mock_run(server, cmd_args):
                 "------------------------------------------------------------\n"
                 "gmtrk          gmtrk.l1t.ir           1007     8444", "err": ""}
     if j == "ratholectl doctor":
-        return {"rc": 0, "out": "OK rathole-server faal ast\nOK nginx faal ast\nOK trk01 amade\n"
-                "khlash: OK=6  FAIL=0", "err": ""}
+        return {"rc": 0, "out": "OK rathole-server faal ast\nOK nginx faal ast\n"
+                "OK  node trk01 rooye port 1005 amade ast\n"
+                "WARN node gamenodetrk rooye port 1007 gvsh nmidhd (klaint node vsl nist?)\n"
+                "khlash: OK=3  FAIL=1", "err": ""}
     if j == "ratholenode ls":
         return {"rc": 0, "out": "tunnel be: rp01.l1t.ir:443  (hame serviceha rooye yek channel kontroli)\n"
                 "SERVICE          INBOUND    TOKEN\n-------------------------------------------\n"
@@ -743,10 +745,19 @@ def parse_game_ls(text):
 
 
 def parse_doctor(text):
-    m = re.search(r"OK=(\d+)\s+FAIL=(\d+)", text or "")
+    # alave bar shomaresh OK/FAIL, vaziat har node ra ham darmiavarad
+    # (khatt-haye "OK node X rooye port P amade ast" / "WARN node X ... gvsh nmidhd")
+    # ta graph/panel betavanad har edge ra sabz/ghermez konad.
+    text = re.sub(r"\x1b\[[0-9;]*m", "", text or "")  # hazf-e rang-haye ANSI (agar tty bood)
+    nodes = {}
+    for line in text.splitlines():
+        m = re.match(r"\s*(OK|WARN|FAIL)\s+node\s+([A-Za-z0-9_-]+)\s+rooye\s+port", line)
+        if m:
+            nodes[m.group(2)] = "ok" if m.group(1) == "OK" else "warn"
+    m = re.search(r"OK=(\d+)\s+FAIL=(\d+)", text)
     if m:
-        return {"ok": int(m.group(1)), "fail": int(m.group(2))}
-    return {"ok": (text or "").count("OK "), "fail": (text or "").count("FAIL")}
+        return {"ok": int(m.group(1)), "fail": int(m.group(2)), "nodes": nodes}
+    return {"ok": text.count("OK "), "fail": text.count("FAIL"), "nodes": nodes}
 
 def parse_node_ls(text):
     svcs = []; server = None
@@ -1220,13 +1231,28 @@ UI_HTML = r"""<!doctype html><html lang="fa" dir="rtl"><head><meta charset="utf-
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>ratholehub</title>
 <style>
- :root{--bg:#0d141c;--panel:#151f2b;--panel2:#1b2735;--line:#263547;--tx:#e7eef6;--mut:#8ba0b6;--ac:#3b82f6;--gr:#22c55e;--rd:#ef4444;--yl:#eab308}
+ :root{--bg:#0a0f16;--panel:#111a25;--panel2:#17222f;--panel3:#1d2a3a;--line:#25364a;--tx:#e7eef6;--mut:#8ba0b6;--ac:#3b82f6;--gr:#22c55e;--rd:#ef4444;--yl:#eab308;
+  --t-ws:#94a3b8;--t-kcp:#3b82f6;--t-noise:#a855f7;--t-plain:#f97316;
+  --mono:Consolas,'Cascadia Mono',ui-monospace,Menlo,monospace;--sbw:210px;--rad:12px}
  *{box-sizing:border-box}
  body{font-family:system-ui,Segoe UI,Tahoma,sans-serif;margin:0;background:var(--bg);color:var(--tx)}
- header{position:sticky;top:0;z-index:5;background:#0f1822;border-bottom:1px solid var(--line);display:flex;align-items:center;gap:14px;padding:12px 20px}
- header .logo{font-weight:700;font-size:18px} header .logo span{color:var(--ac)}
- .wrap{max-width:1100px;margin:0 auto;padding:18px}
- .card{background:var(--panel);border:1px solid var(--line);border-radius:14px;margin:14px 0;overflow:hidden}
+ .mono{font-family:var(--mono);font-size:12.5px}
+ #app{display:flex;min-height:100vh;align-items:stretch}
+ /* ---- sidebar ---- */
+ #sb{width:var(--sbw);flex-shrink:0;position:sticky;top:0;height:100vh;background:var(--panel);border-inline-end:1px solid var(--line);display:flex;flex-direction:column;gap:2px;padding:14px 10px}
+ #sb .logo{font-weight:700;font-size:18px;padding:4px 12px 14px}
+ #sb .logo span{color:var(--ac)}
+ .sitem{display:flex;align-items:center;gap:10px;padding:9px 12px;border-radius:9px;color:var(--mut);cursor:pointer;font-size:14px;border-inline-start:3px solid transparent;user-select:none}
+ .sitem:hover{background:var(--panel2);color:var(--tx)}
+ .sitem.active{background:var(--panel3);color:var(--tx);border-inline-start-color:var(--ac)}
+ .sitem .ic{width:18px;text-align:center;flex-shrink:0}
+ .sfoot{margin-top:auto;display:flex;flex-direction:column;gap:8px;padding:10px 6px 2px;border-top:1px solid var(--line)}
+ .sfoot .clock{color:var(--mut);font-size:12px;font-family:var(--mono);padding:0 6px}
+ main#page{flex:1;min-width:0;padding:20px 22px;max-width:1220px;margin:0 auto}
+ body.login #sb{display:none}
+ body.login main#page{display:grid;place-items:center;max-width:none}
+ /* ---- cards / panels ---- */
+ .card{background:var(--panel);border:1px solid var(--line);border-radius:var(--rad);margin:14px 0;overflow:hidden}
  .chead{display:flex;align-items:center;gap:10px;padding:12px 16px;background:var(--panel2);border-bottom:1px solid var(--line);flex-wrap:wrap}
  .cbody{padding:14px 16px}
  .name{font-weight:700;font-size:16px}
@@ -1239,31 +1265,86 @@ UI_HTML = r"""<!doctype html><html lang="fa" dir="rtl"><head><meta charset="utf-
  .badge{padding:2px 10px;border-radius:20px;font-size:12px;font-weight:600}
  .b-ok{background:rgba(34,197,94,.16);color:#4ade80} .b-bad{background:rgba(239,68,68,.16);color:#f87171}
  .b-kcp{background:rgba(59,130,246,.18);color:#93c5fd} .b-ws{background:rgba(148,163,184,.16);color:#cbd5e1} .b-noise{background:rgba(147,51,234,.18);color:#c4b5fd}
+ .b-plain{background:rgba(249,115,22,.16);color:#fdba74}
  .b-role{background:rgba(234,179,8,.16);color:#fde047}
  table{width:100%;border-collapse:collapse;margin:8px 0;font-size:13px}
- th,td{text-align:right;padding:7px 9px;border-bottom:1px solid var(--line)}
+ th,td{text-align:start;padding:7px 9px;border-bottom:1px solid var(--line)}
  th{color:var(--mut);font-weight:600} tr:last-child td{border-bottom:0}
  .sec{margin-top:12px} .sec h4{margin:0 0 6px;font-size:13px;color:var(--mut);display:flex;gap:8px;align-items:center;flex-wrap:wrap}
- .dot{width:9px;height:9px;border-radius:50%;display:inline-block} .d-ok{background:var(--gr)} .d-bad{background:var(--rd)} .d-un{background:var(--yl)}
+ .dot{width:9px;height:9px;border-radius:50%;display:inline-block;flex-shrink:0} .d-ok{background:var(--gr)} .d-bad{background:var(--rd)} .d-un{background:var(--yl)}
  .up{background:var(--bg);border:1px solid var(--line);border-radius:10px;padding:10px;margin:8px 0}
- pre{background:#0a1017;padding:10px;border-radius:8px;overflow:auto;max-height:220px;white-space:pre-wrap;font-size:12px;margin:8px 0 0}
- .toast{position:fixed;bottom:18px;left:18px;max-width:520px;background:#0a1017;border:1px solid var(--line);border-radius:10px;padding:12px 14px;font-size:12px;white-space:pre-wrap;display:none;z-index:20;box-shadow:0 8px 30px rgba(0,0,0,.5)}
+ pre{background:#070c12;padding:10px;border-radius:8px;overflow:auto;max-height:220px;white-space:pre-wrap;font-size:12px;margin:8px 0 0;font-family:var(--mono)}
+ .toast{position:fixed;bottom:18px;left:18px;max-width:520px;background:#070c12;border:1px solid var(--line);border-radius:10px;padding:12px 14px;font-size:12px;white-space:pre-wrap;display:none;z-index:20;box-shadow:0 8px 30px rgba(0,0,0,.5)}
  .toast.show{display:block}
  .empty{color:var(--mut);font-size:13px;padding:6px 0}
  label.sw{display:flex;gap:6px;align-items:center;font-size:13px;color:var(--mut);cursor:pointer}
  .addbar{display:flex;flex-wrap:wrap;gap:6px;align-items:center}
-.modal{position:fixed;inset:0;background:rgba(0,0,0,.55);display:none;align-items:center;justify-content:center;z-index:50}.mbox{background:#0f1720;border:1px solid #2b3a4a;border-radius:12px;padding:18px;min-width:320px;max-width:90vw;max-height:85vh;overflow:auto}.mbox h3{margin:0 0 12px}.mbox .row{display:flex;gap:8px;align-items:center;margin:8px 0;flex-wrap:wrap}.mbox label{min-width:120px;color:#9fb3c8}.mbox input,.mbox select{background:#0b1219;border:1px solid #2b3a4a;color:#e6eef7;border-radius:8px;padding:6px 8px}.mbox table{width:100%;border-collapse:collapse;font-size:12px}.mbox td,.mbox th{border-bottom:1px solid #22303c;padding:4px 6px;text-align:right}</style></head><body>
-<header><div class="logo">rathole<span>hub</span></div>
- <span class="sub" id="clock"></span><span style="flex:1"></span>
- <button class="gh" id="langbtn" onclick="toggleLang()">EN</button>
- <label class="sw"><input type="checkbox" id="auto" checked> <span id="lb_auto"></span></label>
- <button class="gh" id="refbtn" onclick="loadAll()"></button>
- <button class="gh" id="setbtn" onclick="openSettings()" style="display:none"></button>
- <button class="gh" id="auditbtn" onclick="openAudit()" style="display:none"></button>
- <button class="s" id="logbtn" onclick="logout()" style="display:none"></button>
-</header>
-
-<div class="wrap" id="app"></div>
+ /* ---- dashboard grid / list ---- */
+ .ptitle{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin:2px 0 12px}
+ .ptitle h2{margin:0;font-size:19px}
+ .vswitch{display:flex;gap:2px;background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:2px}
+ .vswitch button{background:transparent;color:var(--mut);padding:4px 10px;border-radius:6px}
+ .vswitch button.on{background:var(--panel3);color:var(--tx)}
+ .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(255px,1fr));gap:12px;margin-top:12px}
+ .scard{background:var(--panel);border:1px solid var(--line);border-radius:var(--rad);padding:13px 15px;cursor:pointer;transition:border-color .15s,transform .15s;display:flex;flex-direction:column;gap:8px}
+ .scard:hover{border-color:var(--ac);transform:translateY(-1px)}
+ .scard .top{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+ .scard .host{color:var(--mut)}
+ .scard .bstrip{display:flex;gap:5px;flex-wrap:wrap;min-height:22px}
+ .scard .meta{color:var(--mut);font-size:12px;display:flex;gap:12px;flex-wrap:wrap;align-items:center}
+ .scard .meta .qr{margin-inline-start:auto}
+ .grid.list{grid-template-columns:1fr;gap:8px}
+ .grid.list .scard{flex-direction:row;align-items:center;padding:9px 15px;gap:12px}
+ .grid.list .scard .top{flex:0 0 auto;min-width:210px}
+ .grid.list .scard .bstrip{flex:1;min-height:0}
+ .grid.list .scard .meta{flex:0 0 auto}
+ /* ---- server page ---- */
+ .spage-head{display:flex;flex-wrap:wrap;gap:10px;align-items:center;background:var(--panel2);border:1px solid var(--line);border-radius:var(--rad);padding:12px 16px;margin-bottom:4px}
+ .spage .sec{background:var(--panel);border:1px solid var(--line);border-radius:var(--rad);padding:12px 14px;margin-top:12px}
+ .back{background:transparent;border:1px solid var(--line);color:var(--tx);border-radius:8px;font-size:15px;padding:4px 12px}
+ /* ---- routing graph ---- */
+ .gwrap{direction:ltr;overflow:auto;background:var(--panel);border:1px solid var(--line);border-radius:var(--rad);margin-top:12px}
+ .gwrap svg{display:block;width:100%;min-width:780px;height:auto}
+ .gbox{fill:var(--panel2);stroke:var(--line);cursor:pointer;transition:.15s}
+ .gbox:hover{stroke:var(--ac)}
+ .gbox-iran{stroke:#31527d}
+ .gbox-ext{stroke-dasharray:5 4;opacity:.8;cursor:default}
+ .gbox-off{opacity:.5}
+ .gcolhead{fill:var(--mut);font-size:12px;font-weight:600}
+ .gtxt{fill:var(--tx);font-size:13.5px;font-weight:700;cursor:pointer}
+ .gsub{fill:var(--mut);font-size:11px;font-family:var(--mono)}
+ .edge{fill:none;stroke-width:2;opacity:.9}
+ .e-user{stroke:#3b4c61;stroke-width:1.5}
+ .e-ws{stroke:var(--t-ws)} .e-kcp{stroke:var(--t-kcp);stroke-dasharray:9 5}
+ .e-noise{stroke:var(--t-noise);stroke-dasharray:3 5} .e-plain{stroke:var(--t-plain);stroke-dasharray:12 4}
+ .e-bad{stroke:var(--rd) !important;stroke-dasharray:3 4}
+ .e-dim{opacity:.3}
+ .flow{animation:dashflow 1.1s linear infinite}
+ @keyframes dashflow{to{stroke-dashoffset:-28}}
+ @media (prefers-reduced-motion:reduce){.flow{animation:none}}
+ .elab rect{fill:#0b131d;stroke:var(--line);rx:9}
+ .elab text{fill:var(--tx);font-size:11px;font-family:var(--mono);cursor:pointer}
+ .legend{display:flex;flex-wrap:wrap;gap:16px;font-size:12px;color:var(--mut);margin:10px 2px;align-items:center;direction:ltr}
+ .legend .li{display:flex;gap:7px;align-items:center}
+ .legend .lw{width:28px;height:0;border-top:2.5px solid}
+ .lw-ws{border-color:var(--t-ws)} .lw-kcp{border-color:var(--t-kcp);border-top-style:dashed}
+ .lw-noise{border-color:var(--t-noise);border-top-style:dotted} .lw-plain{border-color:var(--t-plain);border-top-style:dashed}
+ .lw-bad{border-color:var(--rd);border-top-style:dashed}
+ /* ---- modal ---- */
+ .modal{position:fixed;inset:0;background:rgba(0,0,0,.55);display:none;align-items:center;justify-content:center;z-index:50}.mbox{background:#0f1720;border:1px solid #2b3a4a;border-radius:12px;padding:18px;min-width:320px;max-width:90vw;max-height:85vh;overflow:auto}.mbox h3{margin:0 0 12px}.mbox .row{display:flex;gap:8px;align-items:center;margin:8px 0;flex-wrap:wrap}.mbox label{min-width:120px;color:#9fb3c8}.mbox input,.mbox select{background:#0b1219;border:1px solid #2b3a4a;color:#e6eef7;border-radius:8px;padding:6px 8px}.mbox table{width:100%;border-collapse:collapse;font-size:12px}.mbox td,.mbox th{border-bottom:1px solid #22303c;padding:4px 6px;text-align:start}
+ /* ---- mobile ---- */
+ @media (max-width:760px){
+  #app{flex-direction:column}
+  #sb{width:auto;height:auto;position:sticky;top:0;z-index:10;flex-direction:row;align-items:center;overflow-x:auto;padding:6px 8px;gap:4px;border-inline-end:0;border-bottom:1px solid var(--line)}
+  #sb .logo{padding:2px 8px;font-size:15px;flex-shrink:0}
+  .sitem{padding:7px 10px;border-inline-start:0;border-bottom:2px solid transparent;border-radius:7px;flex-shrink:0}
+  .sitem.active{border-inline-start:0;border-bottom-color:var(--ac)}
+  .sfoot{margin:0;margin-inline-start:auto;flex-direction:row;align-items:center;border-top:0;padding:0 4px;gap:6px;flex-shrink:0}
+  .sfoot .clock{display:none}
+  main#page{padding:12px}
+ }
+</style></head><body>
+<div id="app"></div>
 <div class="toast" id="toast" onclick="this.classList.remove('show')"></div>
 <script>
 const $=id=>document.getElementById(id);
@@ -1336,6 +1417,14 @@ const DICT={
   dt_list:'gvahihaye mojood rooye in server:',dt_active:'faal',dt_expiry:'enghza',dt_none:'gvahii peyda nashod.',
   dt_served:'damnhhaye faal rooye in server:',dt_kind:'nooe',dt_primary:'asli',dt_extra:'ezafi',dt_add:'afzoodan damnh',dt_add_btn:'+ damnh',dt_makeprimary:'asli kon',dt_mp_confirm:'damnh asli avaz shavad be',
   running:'ejra-ye',on:'rooye',ok_rc:'anjam shod',fail_rc:'nashod',
+  nav_dash:'dashbord',nav_routing:'naghshe masirha',back:'bazgasht',
+  view_grid:'kart',view_list:'list',
+  n_nodes:'node',n_svcs:'service',n_ups:'upstream',n_game:'game',
+  srv_notfound:'server peyda nashod',
+  g_users:'karbaran',g_iran_col:'serverhaye Iran',g_node_col:'nodehaye kharej',
+  g_legend:'rahnama',g_loading:'dar hal sakhtan naghshe…',g_empty:'serveri baraye namayesh nist.',
+  g_external:'server-e kharej az panel',g_hint:'rooye har box ya label click kon ta safhe-ye server baz shavad.',
+  nd_up:'faal',nd_down:'ghat',e_bad:'edge ghermez = node vasl nist (doctor)',
  },
  en:{
   auto:'Auto refresh',refresh:'Refresh',settings:'Settings',audit:'Activity log',logout:'Logout',
@@ -1397,14 +1486,19 @@ const DICT={
   dt_list:'Certificates on this server:',dt_active:'active',dt_expiry:'expiry',dt_none:'No certificates found.',
   dt_served:'Active domains on this server:',dt_kind:'Type',dt_primary:'primary',dt_extra:'extra',dt_add:'Add domain',dt_add_btn:'+ domain',dt_makeprimary:'Make primary',dt_mp_confirm:'Switch primary domain to',
   running:'running',on:'on',ok_rc:'done',fail_rc:'failed',
+  nav_dash:'Dashboard',nav_routing:'Routing map',back:'Back',
+  view_grid:'Grid',view_list:'List',
+  n_nodes:'nodes',n_svcs:'services',n_ups:'upstreams',n_game:'game',
+  srv_notfound:'Server not found',
+  g_users:'Users',g_iran_col:'Iran servers',g_node_col:'Foreign nodes',
+  g_legend:'Legend',g_loading:'Building map…',g_empty:'Nothing to draw yet.',
+  g_external:'Server outside this panel',g_hint:'Click any box or label to open that server page.',
+  nd_up:'up',nd_down:'down',e_bad:'red edge = node not connected (doctor)',
  }
 };
 function t(k){return (DICT[LANG]&&DICT[LANG][k])||DICT.fa[k]||k;}
 function applyStatic(){
  document.documentElement.lang=LANG; document.documentElement.dir=(LANG==='fa'?'rtl':'ltr');
- $('langbtn').textContent=(LANG==='fa'?'EN':'فا');
- $('lb_auto').textContent=t('auto'); $('refbtn').textContent=t('refresh');
- $('setbtn').textContent=t('settings'); $('auditbtn').textContent=t('audit'); $('logbtn').textContent=t('logout');
 }
 function toggleLang(){LANG=(LANG==='fa'?'en':'fa');localStorage.setItem('rh_lang',LANG);applyStatic();shell();}
 function confirmT(k,extra){return confirm(t(k)+(extra?(' '+extra):'')+' ?');}
@@ -1416,7 +1510,6 @@ async function api(m,p,b){const o={method:m,headers:{'Content-Type':'application
  const r=await fetch(p,o); let j={};try{j=await r.json()}catch(e){}
  if(r.status===401){TOKEN='';localStorage.removeItem('rh_token');shell();} return {status:r.status,j};}
 function logout(){TOKEN='';localStorage.removeItem('rh_token');shell();}
-function setNav(d){['setbtn','auditbtn'].forEach(i=>{const e=$(i);if(e)e.style.display=d;});}
 function modal(html){let m=$('modal');if(!m){m=document.createElement('div');m.id='modal';m.className='modal';m.onclick=e=>{if(e.target===m)closeModal();};document.body.appendChild(m);}m.innerHTML='<div class="mbox">'+html+'</div>';m.style.display='flex';}
 function closeModal(){const m=$('modal');if(m)m.style.display='none';}
 
@@ -1442,17 +1535,103 @@ function formModal(title,fields,onOk){
 }
 const PROF=[{v:'balanced',t:'balanced'},{v:'lossy',t:'lossy'},{v:'aggressive',t:'aggressive'}];
 
-setInterval(()=>{$('clock').textContent=new Date().toLocaleTimeString(LANG==='fa'?'fa-IR':'en-US');},1000);
+setInterval(()=>{const c=$('clock');if(c)c.textContent=new Date().toLocaleTimeString(LANG==='fa'?'fa-IR':'en-US');},1000);
+
+// ---------- router (hash-based ta posht-e /hub/ ham kar konad) ----------
+let OVS={};                                            // cache: name -> akharin overview
+let VIEW=localStorage.getItem('rh_view')||'grid';      // chinesh dashboard: grid|list
+let ROUTE={page:'dashboard',param:null};
+function parseHash(){const hh=location.hash||'#/dashboard';
+ let m=hh.match(/^#\/server\/([A-Za-z0-9_-]+)$/); if(m)return{page:'server',param:m[1]};
+ m=hh.match(/^#\/(dashboard|routing|audit|settings)$/); return m?{page:m[1],param:null}:{page:'dashboard',param:null};}
+function nav(hh){if(location.hash===hh){router();}else{location.hash=hh;}}
+window.addEventListener('hashchange',()=>{if(TOKEN)router();});
+function markNav(){document.querySelectorAll('.sitem').forEach(e=>{
+ e.classList.toggle('active',e.dataset.pg===ROUTE.page);});}
+async function router(){
+ if(!TOKEN)return; ROUTE=parseHash(); markNav();
+ await ensureServers();
+ if(ROUTE.page==='server')renderServerPage(ROUTE.param);
+ else if(ROUTE.page==='routing')renderRouting();
+ else if(ROUTE.page==='audit')renderAuditPage();
+ else if(ROUTE.page==='settings')renderSettingsPage();
+ else renderDashboard();
+}
+async function ensureServers(){if(SERVERS.length)return;const {j}=await api('GET','api/servers');SERVERS=j||[];}
+// sazegari ba code-haye ghadimi: refresh-e inventory + safhe-ye faal
+async function loadAll(){SERVERS=[];await ensureServers();router();}
+// vaghti overview miresad, faghat safhe-ye faal ra be-rooz kon
+function onOv(n){
+ if(ROUTE.page==='dashboard')updateCard(n);
+ else if(ROUTE.page==='server'&&ROUTE.param===n)renderServerPage(n);
+ else if(ROUTE.page==='routing')scheduleGraph();
+}
+async function loadOv(n){const {j}=await api('GET','api/servers/'+n+'/overview');OVS[n]=j||{};onOv(n);}
 
 function shell(){
  applyStatic();
- if(!TOKEN){$('logbtn').style.display='none';setNav('none');
-  $('app').innerHTML=`<div class="card"><div class="cbody"><h3>${t('login_title')}</h3>
+ if(!TOKEN){document.body.classList.add('login');
+  $('app').innerHTML=`<main id="page"><div class="card" style="min-width:300px"><div class="cbody"><h3>${t('login_title')}</h3>
    <div class="addbar"><input id="pw" type="password" placeholder="${t('pw_ph')}" style="min-width:220px">
-   <button class="g" onclick="doLogin()">${t('login_btn')}</button></div><div id="msg" class="sub"></div></div></div>`;
+   <button class="g" onclick="doLogin()">${t('login_btn')}</button></div><div id="msg" class="sub"></div></div></div></main>`;
   const p=$('pw'); if(p)p.addEventListener('keydown',e=>{if(e.key==='Enter')doLogin();}); return;}
- $('logbtn').style.display='';setNav('');
- $('app').innerHTML=`<div class="card"><div class="cbody">
+ document.body.classList.remove('login');
+ $('app').innerHTML=`<nav id="sb">
+   <div class="logo">rathole<span>hub</span></div>
+   <div class="sitem" data-pg="dashboard" onclick="nav('#/dashboard')"><span class="ic">▦</span><span>${t('nav_dash')}</span></div>
+   <div class="sitem" data-pg="routing" onclick="nav('#/routing')"><span class="ic">◈</span><span>${t('nav_routing')}</span></div>
+   <div class="sitem" data-pg="audit" onclick="nav('#/audit')"><span class="ic">≡</span><span>${t('audit')}</span></div>
+   <div class="sitem" data-pg="settings" onclick="nav('#/settings')"><span class="ic">⚙</span><span>${t('settings')}</span></div>
+   <div class="sfoot">
+    <span class="clock" id="clock"></span>
+    <label class="sw"><input type="checkbox" id="auto" checked> <span>${t('auto')}</span></label>
+    <div class="btns"><button class="gh" onclick="toggleLang()">${LANG==='fa'?'EN':'فا'}</button>
+    <button class="gh" onclick="refreshPage()">${t('refresh')}</button>
+    <button class="s" onclick="logout()">${t('logout')}</button></div>
+   </div></nav><main id="page"></main>`;
+ router();
+}
+function refreshPage(){SERVERS=[];ensureServers().then(()=>{router();pollByPage();});}
+// polling-e hoshmand: faghat overview-haye lazem baraye safhe-ye faal
+function pollByPage(){
+ if(!TOKEN)return;
+ if(ROUTE.page==='server'&&ROUTE.param){loadOv(ROUTE.param);}
+ else if(ROUTE.page==='dashboard'||ROUTE.page==='routing'){SERVERS.forEach(s=>loadOv(s.name));}
+}
+async function doLogin(){const {status,j}=await api('POST','api/login',{password:$('pw').value});
+ if(status===200){TOKEN=j.token;localStorage.setItem('rh_token',TOKEN);if(!location.hash)location.hash='#/dashboard';shell();}else{$('msg').textContent=t('pw_wrong');}}
+function fnd(n){return SERVERS.find(s=>s.name===n)||{};}
+function setDot(n,cls){const d=$('dot_'+n); if(d)d.className='dot '+cls;}
+
+// ---------- badge-haye khoolase (moshtarak beyne kart va safhe-ye server) ----------
+function headBadges(n,ov){
+ const role=fnd(n).role;
+ if(!ov||ov.reachable===false)return `<span class="badge b-bad">${t('no_ssh')}</span>`;
+ let hb='';
+ if(role==='iran'){const ok=(ov.health||{}).fail===0;
+  hb=`<span class="badge ${ok?'b-ok':'b-bad'}">doctor ${(ov.health||{}).ok||0}/${((ov.health||{}).ok||0)+((ov.health||{}).fail||0)}</span>`;
+  const k=ov.kcp||{}; hb+=k.enabled?` <span class="badge b-kcp">kcp ${h(k.profile||'')}${k.port?(' :'+h(k.port)):''}${k.stealth?' · QUIC':''}</span>`:' <span class="badge b-ws">ws/443</span>';
+  const nz=ov.noise||{}; if(nz.enabled){hb+=` <span class="badge b-noise">noise${nz.port?(' :'+h(nz.port)):''}${nz.count?(' · '+h(nz.count)+' node'):''}</span>`;}
+ }else{const m=ov.main_tunnel||(ov.kcp||{}).mode||'ws';
+  hb=m==='noise'?`<span class="badge b-noise">tunnel noise</span>`:(m==='kcp'?`<span class="badge b-kcp">tunnel kcp ${h((ov.kcp||{}).profile||'')}</span>`:(m==='plain'?`<span class="badge b-plain">tunnel plain</span>`:'<span class="badge b-ws">tunnel ws/443</span>'));
+  if((ov.noise||{}).enabled&&m!=='noise'){hb+=' <span class="badge b-noise">noise</span>';}
+ }
+ return hb;
+}
+function ovDotCls(n,ov){
+ if(!ov)return 'd-un';
+ if(ov.reachable===false)return 'd-bad';
+ if(fnd(n).role==='iran')return ((ov.health||{}).fail===0)?'d-ok':'d-bad';
+ return 'd-ok';
+}
+
+// ---------- safhe: dashboard (grid/list kart-haye khoolase) ----------
+function renderDashboard(){
+ const pg=$('page'); if(!pg)return;
+ pg.innerHTML=`<div class="ptitle"><h2>${t('nav_dash')}</h2><span style="flex:1"></span>
+   <div class="vswitch"><button id="vg" class="${VIEW==='grid'?'on':''}" onclick="setView('grid')">▦ ${t('view_grid')}</button>
+   <button id="vl" class="${VIEW==='list'?'on':''}" onclick="setView('list')">☰ ${t('view_list')}</button></div></div>
+  <div class="card" style="margin-top:0"><div class="cbody">
    <div class="addbar"><b>${t('add_server')}:</b>
    <input id="n" placeholder="${t('f_name')}" size="10"><select id="rl"><option value="iran">iran</option><option value="node">node</option></select>
    <input id="hh" placeholder="${t('f_host')}" size="14"><input id="uu" value="root" size="6"><input id="pp" value="22" size="4">
@@ -1460,51 +1639,64 @@ function shell(){
    <button class="g" onclick="provSrv()">${t('prov_btn')}</button>
    <button class="gh" onclick="addSrv()">${t('add_btn')}</button></div>
    <div class="sub" style="margin-top:6px">${t('prov_hint')}</div></div></div>
-   <div id="servers"></div>`;
- loadAll();
+  <div id="servers" class="grid ${VIEW==='list'?'list':''}"></div>`;
+ drawCards();
+ SERVERS.forEach(s=>{if(OVS[s.name])updateCard(s.name);loadOv(s.name);});
 }
-async function doLogin(){const {status,j}=await api('POST','api/login',{password:$('pw').value});
- if(status===200){TOKEN=j.token;localStorage.setItem('rh_token',TOKEN);shell();}else{$('msg').textContent=t('pw_wrong');}}
-
-async function loadAll(){ if(!TOKEN)return; const {j}=await api('GET','api/servers'); SERVERS=j||[];
+function setView(v){VIEW=v;localStorage.setItem('rh_view',v);
+ const c=$('servers');if(c)c.classList.toggle('list',v==='list');
+ const vg=$('vg'),vl=$('vl');if(vg)vg.classList.toggle('on',v==='grid');if(vl)vl.classList.toggle('on',v==='list');}
+function drawCards(){
  const c=$('servers'); if(!c)return;
- if(!SERVERS.length){c.innerHTML=`<div class="card"><div class="cbody empty">${t('no_servers')}</div></div>`;return;}
- c.innerHTML=SERVERS.map(s=>`<div class="card" id="srv_${h(s.name)}">
-   <div class="chead"><span class="dot d-un" id="dot_${h(s.name)}"></span>
-     <span class="name">${h(s.name)}</span><span class="badge b-role">${h(s.role)}</span>
-     <span class="sub">${h(s.host)}:${s.ssh_port}</span><span id="hd_${h(s.name)}"></span>
-     <span style="flex:1"></span>
-     <div class="btns">
-       <button class="gh" onclick="loadOv('${h(s.name)}')">↻</button>
-       <button class="gh" onclick="showDetails('${h(s.name)}')">${t('details')}</button>
-       <button class="s" onclick="doDeploy('${h(s.name)}')">${t('update')}</button>
-       <button class="s" onclick="run('${h(s.name)}','tune')">tune</button>
-       <button class="gh" onclick="editServer('${h(s.name)}')">${t('edit_server')}</button>
-       <button class="r" onclick="delSrv('${h(s.name)}')">${t('del_server')}</button>
-     </div></div>
-   <div class="cbody" id="body_${h(s.name)}"><div class="empty">${t('loading')}</div></div></div>`).join('');
- SERVERS.forEach(s=>loadOv(s.name));
+ if(!SERVERS.length){c.innerHTML=`<div class="card" style="margin:0"><div class="cbody empty">${t('no_servers')}</div></div>`;return;}
+ c.innerHTML=SERVERS.map(s=>`<div class="scard" id="srv_${h(s.name)}" onclick="nav('#/server/${h(s.name)}')">
+   <div class="top"><span class="dot d-un" id="dot_${h(s.name)}"></span>
+    <span class="name">${h(s.name)}</span><span class="badge b-role">${h(s.role)}</span></div>
+   <div class="host mono">${h(s.host)}:${s.ssh_port}</div>
+   <div class="bstrip" id="hd_${h(s.name)}"><span class="sub">${t('loading')}</span></div>
+   <div class="meta" id="mt_${h(s.name)}"><span class="qr"><button class="gh" onclick="event.stopPropagation();loadOv('${h(s.name)}')">↻</button></span></div>
+  </div>`).join('');
 }
-function fnd(n){return SERVERS.find(s=>s.name===n)||{};}
-async function loadOv(n){const {j}=await api('GET','api/servers/'+n+'/overview'); renderOv(n,j||{});}
-function setDot(n,cls){const d=$('dot_'+n); if(d)d.className='dot '+cls;}
+function updateCard(n){
+ const ov=OVS[n]; if(!ov)return;
+ setDot(n,ovDotCls(n,ov));
+ const hd=$('hd_'+n); if(hd)hd.innerHTML=headBadges(n,ov);
+ const mt=$('mt_'+n); if(!mt)return;
+ let meta='';
+ if(ov.reachable===false){meta=`<span>${h((ov.error||'').split(String.fromCharCode(10))[0].slice(0,60))}</span>`;}
+ else if(fnd(n).role==='iran'){meta=`<span>${(ov.nodes||[]).length} ${t('n_nodes')}</span>`;
+  if((ov.game||[]).length)meta+=`<span>${ov.game.length} ${t('n_game')}</span>`;}
+ else{meta=`<span>${(ov.services||[]).length} ${t('n_svcs')}</span>`;
+  if((ov.upstreams||[]).length)meta+=`<span>${ov.upstreams.length} ${t('n_ups')}</span>`;
+  if(ov.main_server)meta+=`<span class="mono">→ ${h(ov.main_server)}</span>`;}
+ mt.innerHTML=meta+`<span class="qr"><button class="gh" onclick="event.stopPropagation();loadOv('${h(n)}')">↻</button></span>`;
+}
 
-function renderOv(n,ov){
- const body=$('body_'+n), hd=$('hd_'+n); if(!body)return; const role=fnd(n).role;
- if(ov.reachable===false){setDot(n,'d-bad');hd.innerHTML=`<span class="badge b-bad">${t('no_ssh')}</span>`;
-   body.innerHTML=`<div class="empty">${t('ssh_help')}<br><code>ssh-copy-id -i /root/.ssh/id_ed25519.pub root@${h(fnd(n).host)}</code><br><br>${h(ov.error||'')}</div>`;return;}
- let hb='';
- if(role==='iran'){const ok=(ov.health||{}).fail===0; setDot(n,ok?'d-ok':'d-bad');
-   hb=`<span class="badge ${ok?'b-ok':'b-bad'}">doctor ${(ov.health||{}).ok||0}/${((ov.health||{}).ok||0)+((ov.health||{}).fail||0)}</span>`;
-   const k=ov.kcp||{}; hb+=k.enabled?` <span class="badge b-kcp">kcp ${h(k.profile||'')}${k.port?(' :'+h(k.port)):''}${k.stealth?' · QUIC':''}</span>`:' <span class="badge b-ws">ws/443</span>';
-   const nz=ov.noise||{}; if(nz.enabled){hb+=` <span class="badge b-noise">noise${nz.port?(' :'+h(nz.port)):''}${nz.count?(' · '+h(nz.count)+' node'):''}</span>`;}
- } else { const m=ov.main_tunnel||(ov.kcp||{}).mode||'ws'; setDot(n,'d-ok');
-   hb=m==='noise'?`<span class="badge b-noise">tunnel noise</span>`:(m==='kcp'?`<span class="badge b-kcp">tunnel kcp ${h((ov.kcp||{}).profile||'')}</span>`:'<span class="badge b-ws">tunnel ws/443</span>');
-   if((ov.noise||{}).enabled && m!=='noise'){hb+=' <span class="badge b-noise">noise</span>';}
- }
- hd.innerHTML=hb;
- body.innerHTML = role==='iran'? renderIran(n,ov) : renderNode(n,ov);
+// ---------- safhe: server (hameye amaliat-e ghadimi inja) ----------
+function renderServerPage(n){
+ const pg=$('page'); if(!pg)return; const s=fnd(n);
+ if(!s.name){pg.innerHTML=`<div class="ptitle"><button class="back" onclick="nav('#/dashboard')">${LANG==='fa'?'→':'←'} ${t('back')}</button><h2>${t('srv_notfound')}</h2></div>`;return;}
+ const ov=OVS[n];
+ let head=`<div class="spage-head"><button class="back" onclick="nav('#/dashboard')">${LANG==='fa'?'→':'←'} ${t('back')}</button>
+   <span class="dot ${ovDotCls(n,ov)}" id="dot_${h(n)}"></span>
+   <span class="name" style="font-size:18px">${h(n)}</span><span class="badge b-role">${h(s.role)}</span>
+   <span class="sub mono">${h(s.host)}:${s.ssh_port}</span><span id="hd_${h(n)}">${ov?headBadges(n,ov):''}</span>
+   <span style="flex:1"></span>
+   <div class="btns">
+     <button class="gh" onclick="loadOv('${h(n)}')">↻</button>
+     <button class="gh" onclick="showDetails('${h(n)}')">${t('details')}</button>
+     <button class="s" onclick="doDeploy('${h(n)}')">${t('update')}</button>
+     <button class="s" onclick="run('${h(n)}','tune')">tune</button>
+     <button class="gh" onclick="editServer('${h(n)}')">${t('edit_server')}</button>
+     <button class="r" onclick="delSrvPage('${h(n)}')">${t('del_server')}</button>
+   </div></div>`;
+ let body;
+ if(!ov){body=`<div class="empty">${t('loading')}</div>`;loadOv(n);}
+ else if(ov.reachable===false){body=`<div class="sec"><div class="empty">${t('ssh_help')}<br><code>ssh-copy-id -i /root/.ssh/id_ed25519.pub root@${h(s.host)}</code><br><br>${h(ov.error||'')}</div></div>`;}
+ else{body=(s.role==='iran'?renderIran(n,ov):renderNode(n,ov));}
+ pg.innerHTML=`<div class="spage">${head}<div id="body_${h(n)}">${body}</div></div>`;
 }
+async function delSrvPage(n){if(!confirm(t('cf_delsrv')+' ('+n+')'))return;await api('DELETE','api/servers/'+n);SERVERS=[];delete OVS[n];nav('#/dashboard');}
 function tbl(cols){return '<table><tr>'+cols.map(c=>'<th>'+c+'</th>').join('')+'</tr>';}
 function esc(s){return h(s);}
 
@@ -1540,12 +1732,13 @@ function renderIran(n,ov){
  const nodes=ov.nodes||[];
  if(!nodes.length)s+=`<div class="empty">${t('no_nodes')}</div>`;
  else{ s+=tbl([t('c_name'),t('c_dport'),t('c_inbound'),t('c_api'),t('c_ops')]);
-  const nnodes=(ov.noise||{}).nodes||[];
+  const nnodes=(ov.noise||{}).nodes||[]; const hn=(ov.health||{}).nodes||{};
   nodes.forEach(d=>{ const isN=nnodes.indexOf(d.name)>=0;
+   const st=hn[d.name]; const hdot=st?`<span class="dot ${st==='ok'?'d-ok':'d-bad'}" title="${st==='ok'?t('nd_up'):t('nd_down')}" style="margin-inline-end:6px"></span>`:'';
    const nbadge=isN?` <span class="badge b-noise">noise</span>`:'';
    const ntog=isN?`<button class="s" onclick="run('${n}','noise_node_off',{name:'${esc(d.name)}'})">${t('noise_node_off')}</button>`
                  :`<button class="s" onclick="run('${n}','noise_node_on',{name:'${esc(d.name)}'})">${t('noise_node_on')}</button>`;
-   s+=`<tr><td>${esc(d.name)}${nbadge}</td><td>${esc(d.port)}</td><td>${esc(d.inbound)}</td><td>${esc(d.api)}</td>
+   s+=`<tr><td>${hdot}${esc(d.name)}${nbadge}</td><td class="mono">${esc(d.port)}</td><td class="mono">${esc(d.inbound)}</td><td class="mono">${esc(d.api)}</td>
    <td class="btns"><button class="gh" onclick="run('${n}','show_node',{name:'${esc(d.name)}'})">${t('show_token')}</button>
    <button class="gh" onclick="editNode('${n}','${esc(d.name)}')">${t('edit')}</button>
    <button class="gh" onclick="renameNode('${n}','${esc(d.name)}')">${t('rename')}</button>
@@ -1607,10 +1800,192 @@ function renderNode(n,ov){
   if((u.services||[]).length){s+=tbl([t('c_svc'),t('c_inbound'),t('c_ops')]);u.services.forEach(x=>{s+=`<tr><td>${esc(x.name)}</td><td>${esc(x.inbound)}</td>
    <td class="btns"><button class="r" onclick="upRmSvc('${n}','${esc(u.id)}','${esc(x.name)}')">${t('remove')}</button></td></tr>`;});s+='</table>';}
   s+='</div>';
-
  });
  s+='</div>';
  return s;
+}
+
+// ---------- safhe: routing (graph-e topology, SVG dasti bedoon lib) ----------
+let _gTimer=null;
+function scheduleGraph(){clearTimeout(_gTimer);_gTimer=setTimeout(()=>{if(ROUTE.page==='routing')drawGraph();},150);}
+function renderRouting(){
+ const pg=$('page'); if(!pg)return;
+ pg.innerHTML=`<div class="ptitle"><h2>${t('nav_routing')}</h2><span style="flex:1"></span>
+   <button class="gh" onclick="pollByPage()">${t('refresh')}</button></div>
+  <div class="legend"><b style="color:var(--tx)">${t('g_legend')}:</b>
+   <span class="li"><span class="lw lw-ws"></span> ws/443</span>
+   <span class="li"><span class="lw lw-kcp"></span> kcp</span>
+   <span class="li"><span class="lw lw-noise"></span> noise</span>
+   <span class="li"><span class="lw lw-plain"></span> plain</span>
+   <span class="li"><span class="lw lw-bad"></span> ${t('e_bad')}</span></div>
+  <div class="gwrap" id="gwrap"></div>
+  <div class="sub" style="margin-top:8px">${t('g_hint')}</div>`;
+ drawGraph();
+ SERVERS.forEach(s=>{if(!OVS[s.name])loadOv(s.name);});
+}
+// host-e yek "host:port" ra be name-e server-e iran dar inventory map mikonad
+function matchIran(hostport,idmap){
+ if(!hostport)return null;
+ const hst=hostport.replace(/:\d+$/,'').toLowerCase();
+ return idmap[hst]||null;
+}
+function buildGraphModel(){
+ const irans=SERVERS.filter(s=>s.role==='iran'), nds=SERVERS.filter(s=>s.role==='node');
+ // idmap: host/domain → name-e iran (domain az path-e nodes-e overview darmiayad)
+ const idmap={};
+ irans.forEach(s=>{idmap[(s.host||'').toLowerCase()]=s.name;
+  const ov=OVS[s.name];
+  ((ov&&ov.nodes)||[]).forEach(d=>{const m=/^https?:\/\/([^\/]+)/.exec(d.path||'');
+   if(m)idmap[m[1].replace(/:\d+$/,'').toLowerCase()]=s.name;});});
+ const edges=[],externals={};
+ // fallback: agar host match nashod (masalan inventory IP darad vali node ba domain vasl ast),
+ // az rooye esm-e service-haye moshtarak irane motenazer ra peyda kon.
+ function svcFallback(svcNames){
+  const hits=irans.filter(s=>{const ovn=((OVS[s.name]||{}).nodes||[]).map(x=>x.name);
+   return svcNames.some(nm=>ovn.indexOf(nm)>=0);});
+  return hits.length===1?hits[0].name:null;
+ }
+ function target(hostport,svcNames){
+  const nm=matchIran(hostport,idmap); if(nm)return{kind:'iran',name:nm};
+  const fb=svcFallback(svcNames||[]); if(fb)return{kind:'iran',name:fb};
+  const hst=(hostport||'?').replace(/:\d+$/,'');
+  externals[hst]=externals[hst]||{name:hst}; return{kind:'ext',name:hst};
+ }
+ nds.forEach(d=>{
+  const ov=OVS[d.name]; if(!ov||ov.reachable===false)return;
+  if(ov.main_server){edges.push({tgt:target(ov.main_server,(ov.services||[]).map(x=>x.name)),node:d.name,tunnel:ov.main_tunnel||'ws',
+   svcs:(ov.services||[]).map(x=>x.name),label:''});}
+  (ov.upstreams||[]).forEach(u=>{edges.push({tgt:target(u.server,(u.services||[]).map(x=>x.name)),node:d.name,tunnel:u.tunnel||'ws',
+   svcs:(u.services||[]).map(x=>x.name),label:u.id});});
+ });
+ // vaziat-e har edge az doctor-e iran: agar HAR yeki az service-haye in edge kharab bashad → warn
+ edges.forEach(e=>{
+  e.svc=e.svcs.length;
+  if(e.tgt.kind!=='iran')return;
+  const hov=OVS[e.tgt.name]; const hn=((hov||{}).health||{}).nodes||{};
+  const keys=e.svcs.concat([e.node]);
+  if(keys.some(k=>hn[k]==='warn'))e.status='warn';
+  else if(keys.some(k=>hn[k]==='ok'))e.status='ok';
+ });
+ return {irans,nds,edges,externals:Object.keys(externals)};
+}
+function drawGraph(){
+ const w=$('gwrap'); if(!w)return;
+ const M=buildGraphModel();
+ if(!M.irans.length&&!M.nds.length){w.innerHTML=`<div class="empty" style="padding:20px">${t('g_empty')}</div>`;return;}
+ const anyOv=SERVERS.some(s=>OVS[s.name]);
+ const BW=195,BH=60,GY=26,X=[26,300,606],WID=830;
+ // sotoon-e node-ha ra bar asas-e iran-e mabda sort kon ta edge-ha kamtar ghat shavand
+ const firstIran={};
+ M.edges.forEach(e=>{if(!(e.node in firstIran))firstIran[e.node]=(e.tgt.kind==='iran'?e.tgt.name:'zz_'+e.tgt.name);});
+ const nodeCol=M.nds.slice().sort((a,b)=>((firstIran[a.name]||'~')+a.name).localeCompare((firstIran[b.name]||'~')+b.name));
+ const iranCol=M.irans.map(s=>({name:s.name,host:s.host,ext:false}))
+   .concat(M.externals.map(hst=>({name:hst,host:'',ext:true})));
+ // mokhtasat-e amoodi
+ function place(list,x,hh){let y=46;const pos={};list.forEach(it=>{pos[it.name?it.name:it]={x,y,h:hh};y+=hh+GY;});return{pos,bot:y};}
+ const pi=place(iranCol,X[1],BH+8), pn=place(nodeCol,X[2],BH);
+ const H=Math.max(pi.bot,pn.bot,190)+14;
+ // markaz-e amoodi baraye sotoon-e kootah-tar
+ function recenter(p,bot){const off=(H-14-bot)/2;if(off>4)Object.values(p).forEach(o=>o.y+=off);}
+ recenter(pi.pos,pi.bot);recenter(pn.pos,pn.bot);
+ const uy=H/2-35;
+ let sv=`<svg viewBox="0 0 ${WID} ${H}" xmlns="http://www.w3.org/2000/svg">`;
+ sv+=`<text x="${X[0]+60}" y="24" text-anchor="middle" class="gcolhead">${t('g_users')}</text>`;
+ sv+=`<text x="${X[1]+BW/2}" y="24" text-anchor="middle" class="gcolhead">${t('g_iran_col')}</text>`;
+ sv+=`<text x="${X[2]+BW/2}" y="24" text-anchor="middle" class="gcolhead">${t('g_node_col')}</text>`;
+ // --- edges: user → iran (dade-ye vorodi) ---
+ const ucx=X[0]+120;
+ iranCol.forEach(it=>{if(it.ext)return;const p=pi.pos[it.name];const y2=p.y+ (BH+8)/2;
+  sv+=`<path class="edge e-user" d="M ${ucx} ${uy+35} C ${(ucx+X[1])/2} ${uy+35} ${(ucx+X[1])/2} ${y2} ${X[1]} ${y2}" marker-end="url(#arr)"/>`;});
+ // --- edges: iran ← node (tunnel-haye barghashti) ---
+ // taghsim-e noghat-e etesal rooye labe-ye har box baraye jelogiri az ham-poshani
+ const outCnt={},inCnt={};
+ M.edges.forEach(e=>{const k=e.tgt.name;outCnt[k]=(outCnt[k]||0)+1;inCnt[e.node]=(inCnt[e.node]||0)+1;});
+ const outIdx={},inIdx={};
+ let edgeSvg='',labSvg='';
+ M.edges.forEach(e=>{
+  const P1=pi.pos[e.tgt.name],P2=pn.pos[e.node]; if(!P1||!P2)return;
+  outIdx[e.tgt.name]=(outIdx[e.tgt.name]||0)+1; inIdx[e.node]=(inIdx[e.node]||0)+1;
+  const y1=P1.y+P1.h*outIdx[e.tgt.name]/(outCnt[e.tgt.name]+1);
+  const y2=P2.y+P2.h*inIdx[e.node]/(inCnt[e.node]+1);
+  const x1=X[1]+BW,x2=X[2],mx=(x1+x2)/2;
+  const cls=e.status==='warn'?'e-bad':('e-'+(['ws','kcp','noise','plain'].indexOf(e.tunnel)>=0?e.tunnel:'ws'));
+  const anim=(e.tunnel!=='ws'||e.status==='warn')?' flow':'';
+  const dim=e.status==='warn'?'':''; // edge-e kharab ghermez mishavad, dim nemikonim
+  edgeSvg+=`<path class="edge ${cls}${anim}${dim}" d="M ${x1} ${y1} C ${mx} ${y1} ${mx} ${y2} ${x2} ${y2}"/>`;
+  // label-e vasat-e edge: [upstream-id ·] tunnel · svc
+  const txt=(e.label?e.label+' · ':'')+e.tunnel+(e.svc?(' · '+e.svc):'');
+  const tw=txt.length*6.6+14, lx=mx-tw/2, ly=(y1+y2)/2-9;
+  labSvg+=`<g class="elab" onclick="nav('#/server/${h(e.node)}')"><rect x="${lx}" y="${ly}" width="${tw}" height="18" rx="9"/>`+
+   `<text x="${mx}" y="${ly+13}" text-anchor="middle">${h(txt)}</text></g>`;
+ });
+ sv+=edgeSvg;
+ // --- box: users ---
+ sv+=`<g><rect class="gbox gbox-ext" x="${X[0]}" y="${uy}" width="120" height="70" rx="12"/>`;
+ [[36,uy+26],[60,uy+20],[84,uy+26]].forEach(c=>{sv+=`<circle cx="${c[0]}" cy="${c[1]}" r="6" fill="#3b4c61"/><path d="M ${c[0]-9} ${c[1]+18} a 9 9 0 0 1 18 0" fill="#3b4c61"/>`;});
+ sv+=`<text x="${X[0]+60}" y="${uy+60}" text-anchor="middle" class="gsub">${t('g_users')}</text></g>`;
+ // --- box-haye iran ---
+ iranCol.forEach(it=>{
+  const p=pi.pos[it.name],hh=P=>p.y+P;
+  const ov=OVS[it.name],off=!it.ext&&ov&&ov.reachable===false;
+  const click=it.ext?'':` onclick="nav('#/server/${h(it.name)}')"`;
+  sv+=`<g${click}><rect class="gbox gbox-iran${it.ext?' gbox-ext':''}${off?' gbox-off':''}" x="${p.x}" y="${p.y}" width="${BW}" height="${p.h}" rx="10"><title>${h(it.ext?t('g_external'):it.name)}</title></rect>`;
+  const dcls=it.ext?'#8ba0b6':(off?'var(--rd)':(ov?(((ov.health||{}).fail===0)?'var(--gr)':'var(--rd)'):'var(--yl)'));
+  sv+=`<circle cx="${p.x+16}" cy="${hh(20)}" r="4.5" fill="${dcls}"/>`;
+  sv+=`<text x="${p.x+28}" y="${hh(24)}" class="gtxt">${h(it.name.length>20?it.name.slice(0,19)+'…':it.name)}</text>`;
+  if(it.ext){sv+=`<text x="${p.x+14}" y="${hh(44)}" class="gsub">${t('g_external')}</text>`;}
+  else{sv+=`<text x="${p.x+14}" y="${hh(42)}" class="gsub">${h((it.host||'').slice(0,26))}</text>`;
+   let inf=':443';
+   if(ov){const k=ov.kcp||{},nz=ov.noise||{};inf=':443'+(k.enabled?(' · kcp'+(k.port?(' udp:'+k.port):'')):'')+(nz.enabled?(' · noise:'+(nz.port||'')):'');
+    inf+=' · '+((ov.nodes||[]).length)+' '+t('n_nodes');}
+   sv+=`<text x="${p.x+14}" y="${hh(58)}" class="gsub">${h(inf.slice(0,30))}</text>`;}
+  sv+='</g>';});
+ // --- box-haye node ---
+ nodeCol.forEach(d=>{
+  const p=pn.pos[d.name];const ov=OVS[d.name];const off=ov&&ov.reachable===false;
+  const bad=M.edges.some(e=>e.node===d.name&&e.status==='warn');
+  const dcls=off||bad?'var(--rd)':(ov?'var(--gr)':'var(--yl)');
+  sv+=`<g onclick="nav('#/server/${h(d.name)}')"><rect class="gbox${off?' gbox-off':''}" x="${p.x}" y="${p.y}" width="${BW}" height="${p.h}" rx="10"><title>${h(d.name)}</title></rect>`;
+  sv+=`<circle cx="${p.x+16}" cy="${p.y+20}" r="4.5" fill="${dcls}"/>`;
+  sv+=`<text x="${p.x+28}" y="${p.y+24}" class="gtxt">${h(d.name.length>20?d.name.slice(0,19)+'…':d.name)}</text>`;
+  const sub=(d.host||'')+(ov&&ov.services?(' · '+ov.services.length+' '+t('n_svcs')):'');
+  sv+=`<text x="${p.x+14}" y="${p.y+44}" class="gsub">${h(sub.slice(0,30))}</text></g>`;});
+ sv+=labSvg;
+ sv+=`<defs><marker id="arr" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L8,4 L0,8 z" fill="#3b4c61"/></marker></defs>`;
+ sv+='</svg>';
+ if(!anyOv)sv=`<div class="empty" style="padding:12px 16px 0">${t('g_loading')}</div>`+sv;
+ w.innerHTML=sv;
+}
+
+// ---------- safhe: audit / settings (ghablan modal boodand) ----------
+async function renderAuditPage(){
+ const pg=$('page'); if(!pg)return;
+ pg.innerHTML=`<div class="ptitle"><h2>${t('audit')}</h2></div><div class="card" style="margin-top:0"><div class="cbody" id="auditbody"><div class="empty">${t('loading')}</div></div></div>`;
+ const {j}=await api('GET','api/audit?limit=100');
+ const box=$('auditbody'); if(!box)return;
+ const rows=(j||[]);
+ if(!rows.length){box.innerHTML=`<div class="empty">${t('no_audit')}</div>`;return;}
+ let x=`<table><tr><th>${t('c_time')}</th><th>${t('c_user')}</th><th>server</th><th>${t('c_action')}</th><th>rc</th></tr>`;
+ rows.forEach(e=>{const d=new Date((e.ts||0)*1000).toLocaleString(LANG==='fa'?'fa-IR':'en-US');
+  x+=`<tr><td>${h(d)}</td><td class="mono">${h(e.user)}</td><td>${h(e.server)}</td><td class="mono">${h(e.action)}</td><td>${h(e.rc)}</td></tr>`;});
+ box.innerHTML=x+'</table>';
+}
+async function renderSettingsPage(){
+ const pg=$('page'); if(!pg)return;
+ pg.innerHTML=`<div class="ptitle"><h2>${t('settings')}</h2></div><div class="card" style="margin-top:0"><div class="cbody" id="setbody"><div class="empty">${t('loading')}</div></div></div>`;
+ const {j}=await api('GET','api/config');const c=j||{};
+ const warn=c.insecure?`<div class="badge b-bad" style="margin-bottom:10px">${t('insecure')}</div>`:'';
+ const box=$('setbody'); if(!box)return;
+ box.innerHTML=`${warn}
+  <div class="mbox" style="background:transparent;border:0;padding:0;min-width:0">
+  <div class="row"><label>${t('l_apitoken')}</label><span class="sub mono">${h(c.api_token_hint||'')}</span></div>
+  <div class="row"><label>${t('l_listen')}</label><span class="sub mono">${h(c.listen_host||'')}:${h(c.listen_port||'')}</span></div>
+  <h3 style="margin-top:14px">${t('chpw')}</h3>
+  <div class="row"><label>${t('l_curpw')}</label><input id="cpw" type="password"></div>
+  <div class="row"><label>${t('l_newpw')}</label><input id="npw" type="password" placeholder="${t('pw_hint')}"></div>
+  <div class="row"><button class="g" onclick="savePw()">${t('save_pw')}</button></div>
+  <h3 style="margin-top:14px">${t('l_apitoken')}</h3>
+  <div class="row"><button class="s" onclick="rotTok()">${t('rot_tok')}</button></div></div>`;
 }
 
 function outModal(title,text){var id='om_'+Math.random().toString(36).slice(2);modal('<h3>'+h(title)+'</h3><pre id="'+id+'" style="max-height:52vh;overflow:auto;white-space:pre-wrap;user-select:text;-webkit-user-select:text">'+h(text)+'</pre><div class="row" style="margin-top:10px"><button class="g" onclick="copyText(\''+id+'\')">'+t('copy_out')+'</button> <button class="gh" onclick="closeModal()">'+t('close')+'</button></div>');}
@@ -1641,7 +2016,6 @@ async function provSrv(){const b={name:$('n').value,role:$('rl').value,host:$('h
  const out=((j&&j.out)||'')+((j&&j.err)?('\n'+j.err):'');
  outModal(t('prov_btn')+' · '+b.name, out.trim()||JSON.stringify(j));
  if(status===200){$('n').value='';$('hh').value='';$('sw').value='';loadAll();}}
-async function delSrv(n){if(!confirm(t('cf_delsrv')+' ('+n+')'))return;await api('DELETE','api/servers/'+n);loadAll();}
 
 // ---------- form-based actions (bedoon prompt zanjire-i) ----------
 function gameAdd(n){formModal(t('t_game_add'),[
@@ -1850,12 +2224,10 @@ function editServer(n){const s=fnd(n);formModal(t('t_edit_srv')+' ('+n+')',[
   async v=>{const {status,j}=await api('PUT','api/servers/'+n,{host:v.host,ssh_user:v.ssh_user,ssh_port:v.ssh_port});
    if(status!==200){toast('error: '+(j.error||status));return;}closeModal();toast(t('saved'));loadAll();});}
 
-async function openSettings(){const {j}=await api('GET','api/config');const c=j||{};const warn=c.insecure?`<div class="badge b-bad">${t('insecure')}</div>`:'';
- modal(`<h3>${t('t_settings')}</h3>${warn}<div class="row"><label>${t('l_apitoken')}</label><span class="sub">${h(c.api_token_hint||'')}</span></div><div class="row"><label>${t('l_listen')}</label><span class="sub">${h(c.listen_host||'')}:${h(c.listen_port||'')}</span></div><h3 style="margin-top:14px">${t('chpw')}</h3><div class="row"><label>${t('l_curpw')}</label><input id="cpw" type="password"></div><div class="row"><label>${t('l_newpw')}</label><input id="npw" type="password" placeholder="${t('pw_hint')}"></div><div class="row"><button class="g" onclick="savePw()">${t('save_pw')}</button></div><h3 style="margin-top:14px">${t('l_apitoken')}</h3><div class="row"><button class="s" onclick="rotTok()">${t('rot_tok')}</button></div><div class="row" style="margin-top:10px"><button class="gh" onclick="closeModal()">${t('close')}</button></div>`);}
-async function savePw(){const cur=$('cpw').value,nw=$('npw').value;if(!nw){toast(t('need_newpw'));return;}const {status,j}=await api('POST','api/config',{current_password:cur,new_password:nw});if(status!==200){toast('error: '+(j.error||status));return;}toast(t('pw_changed'));closeModal();}
-async function rotTok(){if(!confirm(t('cf_rottok')))return;const {status,j}=await api('POST','api/config',{rotate_token:true});if(status!==200){toast('error: '+(j.error||status));return;}TOKEN=j.api_token;localStorage.setItem('rh_token',TOKEN);toast(t('tok_applied'));closeModal();}
-async function openAudit(){const {j}=await api('GET','api/audit?limit=100');const rows=(j||[]);let x=`<h3>${t('t_audit')}</h3>`;if(!rows.length)x+=`<div class="empty">${t('no_audit')}</div>`;else{x+=`<table><tr><th>${t('c_time')}</th><th>${t('c_user')}</th><th>server</th><th>${t('c_action')}</th><th>rc</th></tr>`;rows.forEach(e=>{const d=new Date((e.ts||0)*1000).toLocaleString(LANG==='fa'?'fa-IR':'en-US');x+=`<tr><td>${h(d)}</td><td>${h(e.user)}</td><td>${h(e.server)}</td><td>${h(e.action)}</td><td>${h(e.rc)}</td></tr>`;});x+='</table>';}x+=`<div class="row" style="margin-top:10px"><button class="gh" onclick="closeModal()">${t('close')}</button></div>`;modal(x);}
-setInterval(()=>{if($('auto')&&$('auto').checked&&TOKEN&&SERVERS.length)SERVERS.forEach(s=>loadOv(s.name));},20000);
+async function savePw(){const cur=$('cpw').value,nw=$('npw').value;if(!nw){toast(t('need_newpw'));return;}const {status,j}=await api('POST','api/config',{current_password:cur,new_password:nw});if(status!==200){toast('error: '+(j.error||status));return;}toast(t('pw_changed'));$('cpw').value='';$('npw').value='';}
+async function rotTok(){if(!confirm(t('cf_rottok')))return;const {status,j}=await api('POST','api/config',{rotate_token:true});if(status!==200){toast('error: '+(j.error||status));return;}TOKEN=j.api_token;localStorage.setItem('rh_token',TOKEN);toast(t('tok_applied'));renderSettingsPage();}
+// refresh-e khodkar: faghat overview-haye safhe-ye faal (server SSH kamtar mikhorad)
+setInterval(()=>{if($('auto')&&$('auto').checked&&TOKEN)pollByPage();},20000);
 shell();
 
 </script></body></html>"""
