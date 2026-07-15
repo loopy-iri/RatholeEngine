@@ -9,6 +9,21 @@ release.yml hamin bakhsh ra be onvan-e title/body-e GitHub Release montasher mik
 
 ## [Unreleased]
 
+## [1.4.5] - 2026-07-16
+
+### Added
+- **ratholectl `status [--json]`:** dashboard-e kamel-e vaziat (mesl-e panel-e sabaskripshn-e VPN) — domain, IP-e omomi, transport-e faal، vaziat-e service-ha (rathole-server/nginx/noise + salamat-e config-e nginx)، hameye port-ha ba tozih (443/kontrol/fake/sub/internal/plain/direct/hub/noise)، vaziat va enghza-ye gvahi (+ hoshdar-e self-signed)، va jadval-e node-ha ba URL-e karbar. `--json` khorooji-ye machine-readable baraye hub
+- **ratholectl `paths`:** namayesh-e masir-e hameye config-ha va file-ha (state.json، server.toml، nginx conf، cert، systemd unit، binary، common.sh) ba alamat-e ✓/✗ vojood
+- **hub — dokme-ye «vaziat» (Status):** dar safhe-ye har server-e Iran، dokme-ye Status ke `ratholectl status --json` ra migirad va be sorat-e dashboard-e ziba (port-ha/service-ha/gvahi/node-ha) render mikonad (fa/en)
+
+### Changed
+- **ratholectl `hub on [port]`:** dige faghat nginx ra tanzim nemikonad — bar-e **aval** hub ra khodkar **nasb** mikonad (`install-hub.sh` ba `HUB_PORT` dorost؛ ghablan `hub on 2053` faghat nginx ra be 127.0.0.1:2053 point mikard dar hali ke hich servisi roo an port nabood → curl `Connection refused`). dafe-haye **baad** port-dadan yani taghyir-e vaghei-e port: `listen_port` dar `/etc/ratholehub/config.json` avaz + `systemctl restart ratholehub` + nginx hamgam. `hub on` bedoon port، port-e feli-ye config ra hefz mikonad
+- **ratholectl `hub status`:** vaziat-e service `ratholehub` (faal/khamoosh/nasb-nashode) + listen_port ra ham neshan midahad va agar port-e nginx ba listen_port-e hub yeki nabashad hoshdar + dastoor-e dorost midahad
+- **ratholectl `hub off`:** agar service ratholehub roshan bashad yadavari mikonad ke faghat az nginx hazf shode (service ra khamoosh nemikonad)
+
+### Fixed
+- **install-hub.sh:** prompt-e ramz-e panel az stdin mikhand → zir-e `curl|bash` ya ejra az `ratholectl hub on` shekast mikhord؛ hala tty-safe ast (`/dev/tty` fallback، hamsan-e `rth_read`). va vaghti az `ratholectl hub on` seda shavad (`RATHOLECTL_HUB_FROM_CTL=1`) dige khodesh `ratholectl hub on` ra dobare seda nemizanad (jelogiri az halghe/dobare-kari)
+
 ## [1.4.4] - 2026-07-15
 
 ### Fixed

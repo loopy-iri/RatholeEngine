@@ -34,7 +34,7 @@ ssh-copy-id -i /root/.ssh/id_ed25519.pub root@<iran2_ip>
 ssh -L 8088:127.0.0.1:8088 root@<rp01_ip>
 # مرورگر:  http://localhost:8088
 ```
-یا پشت nginx زیر همان دامنه: `sudo ratholectl hub on 8088` → `https://<domain>/hub/`.
+یا پشت nginx زیر همان دامنه: `sudo ratholectl hub on 8088` → `https://<domain>/hub/`. (بار اول اگر هاب نصب نباشد خودش `install-hub.sh` را اجرا می‌کند؛ دفعات بعد پورت واقعی هاب را عوض و سرویس را ری‌استارت می‌کند.)
 
 ## رابط کاربری (UI)
 

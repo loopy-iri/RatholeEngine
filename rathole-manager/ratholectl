@@ -1116,6 +1116,154 @@ cmd_certs(){
   fi
 }
 
+# ---------- namayesh masir-e hameye config-ha (ba alamat-e vojood/adam) ----------
+# estefade: ratholectl paths
+cmd_paths(){
+  need_bin jq; ensure_state
+  local nconf; nconf="$(s_get '.nginx_conf')"; case "$nconf" in ''|null) nconf="$NGINX_CONF" ;; esac
+  local fc key; fc="$(s_get '.cert_fullchain')"; key="$(s_get '.cert_key')"
+  local ok no; ok="$(c_g '✓')"; no="$(c_r '✗')"
+  _row(){ local label="$1" p="$2" m; [ -f "$p" ] && m="$ok" || m="$no"; printf '  %s  %-22s %s\n' "$m" "$label" "$p"; }
+  echo "$(c_y '──────── masir-e config-ha va file-ha ────────')"
+  _row "state.json"        "$STATE"
+  _row "server.toml"       "$SERVER_TOML"
+  _row "nginx rathole.conf" "$nconf"
+  _row "nginx upgrade-map"  "/etc/nginx/conf.d/rathole-upgrade-map.conf"
+  # noise/stream faghat agar roshan bashand
+  [ -f "$NOISE_TOML" ]  && _row "noise-server.toml" "$NOISE_TOML"
+  [ -f "$STREAM_CONF" ] && _row "nginx stream (SNI)" "$STREAM_CONF"
+  _row "cert fullchain"    "$fc"
+  _row "cert privkey"      "$key"
+  _row "systemd server"    "/etc/systemd/system/rathole-server.service"
+  [ -f "/etc/systemd/system/${NOISE_SVC}.service" ] && _row "systemd noise" "/etc/systemd/system/${NOISE_SVC}.service"
+  _row "rathole binary"    "/usr/local/bin/rathole"
+  _row "ratholectl"        "/usr/local/bin/ratholectl"
+  _row "common.sh"         "/usr/local/share/rathole/common.sh"
+  echo "$(c_y '─────────────────────────────────────────────')"
+}
+
+# ---------- dashboard-e kamel-e vaziat (mesl-e panel-e VPN: hameye port-ha/halat-ha/service-ha/node-ha) ----------
+# estefade: ratholectl status [--json]
+cmd_status(){
+  need_bin jq; ensure_state
+  local as_json=0; [ "${1:-}" = "--json" ] && as_json=1
+
+  # ---- khvandan-e state ----
+  local domain ctrl fake sub internal plain_port direct_port direct_header hub_port noise_port cert_fc cert_key sni_count node_count
+  domain="$(s_get '.domain')"
+  ctrl="$(jq -r '.control_port // 2333' "$STATE")"
+  fake="$(jq -r '.fake_port // 8080' "$STATE")"
+  sub="$(jq -r '.sub_port // 2096' "$STATE")"
+  internal="$(jq -r '.internal_port // 8443' "$STATE")"
+  plain_port="$(jq -r '.plain_port // empty' "$STATE")"
+  direct_port="$(jq -r '.direct_port // empty' "$STATE")"
+  direct_header="$(jq -r '.direct_header // "X-Cdn-Id"' "$STATE")"
+  hub_port="$(jq -r '.hub_port // empty' "$STATE")"
+  noise_port="$(jq -r '.noise_port // empty' "$STATE")"
+  cert_fc="$(s_get '.cert_fullchain')"; cert_key="$(s_get '.cert_key')"
+  sni_count="$(jq '[.nodes[]|select(.sni!=null)]|length' "$STATE" 2>/dev/null)"; sni_count="${sni_count:-0}"
+  node_count="$(jq '.nodes|length' "$STATE" 2>/dev/null)"; node_count="${node_count:-0}"
+
+  # ---- cert ----
+  local cert_ok="no" cert_exp="-" cert_selfsigned="no"
+  if [ -f "$cert_fc" ]; then
+    cert_ok="yes"
+    if command -v openssl >/dev/null 2>&1; then
+      cert_exp="$(openssl x509 -enddate -noout -in "$cert_fc" 2>/dev/null | cut -d= -f2)"; [ -n "$cert_exp" ] || cert_exp="?"
+      # self-signed: issuer == subject
+      local iss subj; iss="$(openssl x509 -issuer -noout -in "$cert_fc" 2>/dev/null)"; subj="$(openssl x509 -subject -noout -in "$cert_fc" 2>/dev/null)"
+      [ -n "$iss" ] && [ "${iss#issuer=}" = "${subj#subject=}" ] && cert_selfsigned="yes"
+    fi
+  fi
+
+  # ---- service-ha (active/inactive) ----
+  _svc_active(){ systemctl is-active --quiet "$1" 2>/dev/null && echo yes || echo no; }
+  local svc_server svc_noise svc_nginx nginx_ok
+  svc_server="$(_svc_active rathole-server)"
+  svc_nginx="$(_svc_active nginx)"
+  [ -f "/etc/systemd/system/${NOISE_SVC}.service" ] && svc_noise="$(_svc_active "$NOISE_SVC")" || svc_noise="off"
+  nginx -t >/dev/null 2>&1 && nginx_ok="yes" || nginx_ok="no"
+
+  # ---- transport-e faal ----
+  local mode="websocket+TLS (443)"
+  [ "$sni_count" -gt 0 ] && mode="game/SNI (443 L4 → panel:$internal)"
+
+  local ip; ip="$(detect_ip)"
+
+  # ---------- khoruji-ye JSON (baraye hub) ----------
+  if [ "$as_json" -eq 1 ]; then
+    jq -n \
+      --arg domain "$domain" --arg ip "$ip" --arg mode "$mode" \
+      --argjson ctrl "${ctrl:-2333}" --argjson fake "${fake:-8080}" --argjson sub "${sub:-2096}" \
+      --argjson internal "${internal:-8443}" \
+      --arg plain "${plain_port:-}" --arg direct "${direct_port:-}" --arg dhdr "$direct_header" \
+      --arg hub "${hub_port:-}" --arg noise "${noise_port:-}" \
+      --arg cert_fc "$cert_fc" --arg cert_key "$cert_key" --arg cert_ok "$cert_ok" \
+      --arg cert_exp "$cert_exp" --arg cert_ss "$cert_selfsigned" \
+      --arg svc_server "$svc_server" --arg svc_nginx "$svc_nginx" --arg svc_noise "$svc_noise" --arg nginx_ok "$nginx_ok" \
+      --argjson sni_count "${sni_count:-0}" --argjson node_count "${node_count:-0}" \
+      --argjson nodes "$(jq '[.nodes[]|{name, port, inbound_port, api_local_port, sni}]' "$STATE")" \
+      '{domain:$domain, public_ip:$ip, transport:$mode,
+        ports:{control:$ctrl, fake:$fake, sub:$sub, internal:$internal,
+               plain:(if $plain=="" then null else ($plain|tonumber) end),
+               direct:(if $direct=="" then null else ($direct|tonumber) end),
+               hub:(if $hub=="" then null else ($hub|tonumber) end),
+               noise:(if $noise=="" then null else ($noise|tonumber) end)},
+        direct_header:$dhdr,
+        cert:{fullchain:$cert_fc, key:$cert_key, exists:$cert_ok, expiry:$cert_exp, self_signed:$cert_ss},
+        services:{rathole_server:$svc_server, nginx:$svc_nginx, nginx_config_ok:$nginx_ok, noise:$svc_noise},
+        sni_count:$sni_count, node_count:$node_count, nodes:$nodes}'
+    return
+  fi
+
+  # ---------- khoruji-ye adami (mesl-e panel-e sabaskripshn) ----------
+  local ok no on off; ok="$(c_g '●')"; no="$(c_r '●')"; on="$(c_g 'roshan')"; off="$(c_y 'khamoosh')"
+  _yn(){ [ "$1" = yes ] && echo "$ok" || echo "$no"; }
+  echo
+  echo "$(c_y '════════════ RATHOLE PANEL — STATUS ════════════')"
+  printf '  domain      : %s\n' "${domain:-<tanzim nashode>}"
+  printf '  public IP   : %s\n' "${ip:-?}"
+  printf '  transport   : %s\n' "$mode"
+  echo
+  echo "$(c_y '──── service-ha ────')"
+  printf '  %s rathole-server\n'  "$(_yn "$svc_server")"
+  printf '  %s nginx  (config: %s)\n' "$(_yn "$svc_nginx")" "$([ "$nginx_ok" = yes ] && c_g 'salem' || c_r 'khata')"
+  [ "$svc_noise" != off ] && printf '  %s rathole-noise\n' "$(_yn "$svc_noise")"
+  echo
+  echo "$(c_y '──── port-ha ────')"
+  printf '  443       %s  vrvdi-ye asli (nginx TLS ya SNI)\n' "$([ "$svc_nginx" = yes ] && c_g '✓' || c_r '✗')"
+  printf '  %-9s     kontrol-e rathole (127.0.0.1)\n' "$ctrl"
+  printf '  %-9s     sait-e fik/panel (127.0.0.1)\n' "$fake"
+  printf '  %-9s     sabaskripshn (127.0.0.1)\n' "$sub"
+  [ "$sni_count" -gt 0 ] && printf '  %-9s     panel-e dakheli (L7 posht-e SNI)\n' "$internal"
+  [ -n "$plain_port" ]  && printf '  %-9s     plain (websocket bedoon TLS)\n' "$plain_port"
+  [ -n "$direct_port" ] && printf '  %-9s     direct-IP (header: %s)\n' "$direct_port" "$direct_header"
+  [ -n "$hub_port" ]    && printf '  %-9s     hub (127.0.0.1, zir /hub/)\n' "$hub_port"
+  [ -n "$noise_port" ]  && printf '  %-9s     noise (TCP-e omomi, ramznegari-shode)\n' "$noise_port"
+  echo
+  echo "$(c_y '──── gvahi (cert) ────')"
+  if [ "$cert_ok" = yes ]; then
+    printf '  %s mojood — enghza: %s%s\n' "$ok" "$cert_exp" "$([ "$cert_selfsigned" = yes ] && printf ' %s' "$(c_r '(self-signed! gvahi-ye vagheai begir)')" )"
+  else
+    printf '  %s peyda nashod: %s\n' "$no" "$cert_fc"
+    printf '     %s\n' "$(c_r 'nginx rooye 443/TLS bala nemiaiad. begir: ratholectl cert <domain>')"
+  fi
+  echo
+  echo "$(c_y "──── node-ha ($node_count) ────")"
+  if [ "$node_count" -eq 0 ]; then
+    printf '  (hich node-i ezafe nashode) — ezafe: ratholectl add <name> <inbound>\n'
+  else
+    printf '  %-14s %-8s %-10s %-6s %s\n' "NAME" "PORT" "INBOUND" "SNI" "USER URL"
+    jq -r '.nodes[]|[.name,(.port|tostring),(.inbound_port|tostring),(.sni//"-")]|@tsv' "$STATE" |
+    while IFS=$'\t' read -r n p ib sn; do
+      local url; sn="${sn%$'\r'}"
+      if [ "$sn" != "-" ] && [ -n "$sn" ]; then url="SNI:$sn"; else url="https://${domain}/${n}"; fi
+      printf '  %-14s %-8s %-10s %-6s %s\n' "$n" "$p" "$ib" "$sn" "$url"
+    done
+  fi
+  echo "$(c_y '════════════════════════════════════════════════')"
+}
+
 # ---------- grftn gvahi + tanzim damnh (ghir-taamoli, baraye panel) ----------
 # estefade: ratholectl cert <domain> [email]   (email khali = bedoon email sabt mishavad)
 cmd_cert(){
@@ -1532,13 +1680,49 @@ EOF
 }
 
 # ---------- ikparchgi panel web ba nginx (location /hub/ paidar) ----------
+# `hub on` bar-e aval hub ra khodesh nasb mikonad (install-hub.sh); dafe-haye baad
+# faghat port ra hamgam mikonad: listen_port-e config-e hub + restart-e service + nginx.
+HUB_CONF="/etc/ratholehub/config.json"
+hub_installed(){ [ -f "$HUB_CONF" ] && [ -f /etc/systemd/system/ratholehub.service ]; }
+hub_listen_port(){ jq -r '.listen_port // empty' "$HUB_CONF" 2>/dev/null; }
+hub_set_listen_port(){
+  # dar-ja minevisim (cat >) ta permission 600 va inode hefz shavad
+  local p="$1" tmp; tmp="$(rth_mktemp)" || return 1
+  jq --argjson p "$p" '.listen_port=$p' "$HUB_CONF" > "$tmp" && cat "$tmp" > "$HUB_CONF"
+}
+hub_installer(){
+  local c
+  for c in "$SCRIPT_DIR/ratholehub/install-hub.sh" /opt/rathole-manager/ratholehub/install-hub.sh; do
+    [ -f "$c" ] && { printf '%s' "$c"; return 0; }
+  done
+  return 1
+}
 cmd_hub(){
   need_root; need_bin jq; ensure_state
   local sub="${1:-status}" port="${2:-}"
   case "$sub" in
     on)
-      port="${port:-8088}"
-      echo "$port" | grep -qE '^[0-9]+$' || die "port bayad adad bashad."
+      if [ -n "$port" ]; then
+        echo "$port" | grep -qE '^[0-9]+$' || die "port bayad adad bashad."
+      fi
+      # bar-e aval: nasb-e khodkar-e hub (service + config + ramz); dafe-haye baad faghat hamgam-sazi-ye port
+      if ! hub_installed; then
+        local inst
+        inst="$(hub_installer)" || die "install-hub.sh peyda nashod (na kenar-e script na /opt/rathole-manager/ratholehub); aval bundle ra nasb kon ya dasti ejra kon: sudo bash ratholehub/install-hub.sh"
+        port="${port:-8088}"
+        log "hub hanooz nasb nashode; nasb-e khodkar shoroo shod (port $port) ..."
+        RATHOLECTL_HUB_FROM_CTL=1 HUB_PORT="$port" bash "$inst" || die "nasb-e hub shekast khord; dasti emtehan kon: sudo HUB_PORT=$port bash $inst"
+      fi
+      # config-e hub manba-e haghighat-e port ast; port-e jadid → config avaz + restart
+      local cur; cur="$(hub_listen_port)"
+      port="${port:-${cur:-8088}}"
+      if [ -n "$cur" ] && [ "$cur" != "$port" ]; then
+        hub_set_listen_port "$port" || die "berooz-resani-ye $HUB_CONF shekast khord."
+        systemctl restart ratholehub 2>/dev/null || true
+        log "listen_port-e hub avaz shod: $cur → $port (ratholehub restart shod)."
+      fi
+      systemctl is-active --quiet ratholehub 2>/dev/null || systemctl start ratholehub 2>/dev/null || true
+      systemctl is-active --quiet ratholehub 2>/dev/null || warn "service ratholehub bala nayamad! bebin: journalctl -u ratholehub -n 30"
       state_set '.hub_port' "$port" num
       log "panel psht nginx faal shod: https://$(s_get '.domain')/hub/  →  127.0.0.1:$port"
       warn "panel hala amvmi ast; ramz ghvi rooye hab bgzar."
@@ -1547,12 +1731,25 @@ cmd_hub(){
     off)
       local tmp; tmp="$(mktemp)"; jq 'del(.hub_port)' "$STATE" > "$tmp" && mv "$tmp" "$STATE"
       log "panel az nginx hazf shod (location /hub/ brdashth shod)."
+      if systemctl is-active --quiet ratholehub 2>/dev/null; then
+        warn "service ratholehub hamchenan roshan ast (127.0.0.1; dstrsi fght ba SSH-forward). khamoosh: systemctl stop ratholehub"
+      fi
       regenerate
       ;;
     status)
-      local hp; hp="$(jq -r '.hub_port // empty' "$STATE" 2>/dev/null)"
+      local hp lp; hp="$(jq -r '.hub_port // empty' "$STATE" 2>/dev/null)"
       if [ -n "$hp" ]; then echo "panel psht nginx: $(c_g "https://$(s_get '.domain')/hub/")  (port dakhli $hp)"
       else echo "panel psht nginx: $(c_y 'gheyre-faal')  (dstrsi fght ba SSH-forward)"; fi
+      if hub_installed; then
+        lp="$(hub_listen_port)"
+        if systemctl is-active --quiet ratholehub 2>/dev/null; then echo "service ratholehub: $(c_g 'faal')  (127.0.0.1:${lp:-?})"
+        else echo "service ratholehub: $(c_r 'khamoosh/kharab')  (bebin: journalctl -u ratholehub -n 30)"; fi
+        if [ -n "$hp" ] && [ -n "$lp" ] && [ "$hp" != "$lp" ]; then
+          warn "port-e nginx ($hp) ba listen_port-e hub ($lp) yeki nist! dorostesh: ratholectl hub on $lp"
+        fi
+      else
+        echo "service ratholehub: $(c_y 'nasb nashode')  (nasb-e khodkar: ratholectl hub on [port])"
+      fi
       ;;
     *) die "estefade: ratholectl hub <on [port]|off|status>" ;;
   esac
@@ -1927,6 +2124,8 @@ dstvrha:
   ls                           list nodeha
   set <key> <value>            taghir tanzimat srasri (domain/fullchain/key/nginx-conf/fake-port/sub-port/control-port)
   info                         namayesh damnh/gvahi/enghza va damnhhai SNI (baraye panel)
+  status [--json]              dashboard-e kamel: port-ha/halat-ha/service-ha/node-ha (mesl-e panel-e VPN)
+  paths                        namayesh masir-e hameye config-ha va file-ha (ba alamat-e vojood)
   cert <domain> [email]        grftn gvahi Let's Encrypt + tanzim damnh asli (ghir-taamoli)
 
   edit <name> [--inbound N] [--api-port N|off]   virayesh yek node
@@ -1940,7 +2139,7 @@ dstvrha:
   doctor                       barresi slamt system va tmaiz sait fik/rthvl
   tune                         eemal BBR + limithaye system/nginx (rfa 502 zir burst)
   fakeweb <start|stop|rm|status> [port]   sait fik pishfarz rooye fake_port (rfa 502 rooye / dar srvrhai rlh)
-  hub <on [port]|off|status>   ghrardadn panel web psht nginx zir haman damnh (/hub/)
+  hub <on [port]|off|status>   panel web psht nginx zir haman damnh (/hub/); bar-e aval hub ra khodkar nasb mikonad, baad faghat port avaz mikonad
   kcp <on [port] [profile]|off|status|show>   tunnel UDP+FEC ba estetar (port 443=QUIC; profile: balanced/lossy/aggressive)
   plain <on [port]|off|status|show>   tunnel-e websocket bedoon-e TLS (listener HTTP rooye port jda, masalan 8880)
   noise <on [port]|off|node <name> on|off|status|show>   tunnel-e ramznegari-shode (Noise) rooye instans-e dovom (bedoon TLS/cert, port omomi masalan 2334)
@@ -1973,6 +2172,8 @@ main(){
     ls)     cmd_ls ;;
     set)    cmd_set "${1:-}" "${2:-}" ;;
     info)   cmd_info ;;
+    status) cmd_status "${1:-}" ;;
+    paths)  cmd_paths ;;
     cert)   cmd_cert "${1:-}" "${2:-}" ;;
     certs)  cmd_certs ;;
     domain) cmd_domain "$@" ;;

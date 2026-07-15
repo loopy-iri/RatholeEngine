@@ -412,9 +412,11 @@ ssh -L 8088:127.0.0.1:8088 root@<hub_ip>
 
 ```bash
 sudo ratholectl hub on 8088          # persistent location /hub/ behind nginx
+# first run: auto-installs the hub too (install-hub.sh, asks for the admin password)
+# later runs: changes the hub's real listen_port + restarts ratholehub + updates nginx
 # access:  https://panel.example.ir/hub/
-sudo ratholectl hub status
-sudo ratholectl hub off              # remove from nginx
+sudo ratholectl hub status           # also shows ratholehub service state and port-mismatch warnings
+sudo ratholectl hub off              # remove from nginx (the service keeps running on 127.0.0.1)
 ```
 
 > Since `hub on` makes the panel public, make sure you set a **strong password**.

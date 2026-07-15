@@ -414,9 +414,11 @@ ssh -L 8088:127.0.0.1:8088 root@<hub_ip>
 
 ```bash
 sudo ratholectl hub on 8088          # location /hub/ پایدار پشت nginx
+# بار اول: هاب را هم خودکار نصب می‌کند (install-hub.sh، رمز ادمین را می‌پرسد)
+# دفعات بعد: listen_port واقعی هاب را عوض می‌کند + ratholehub ری‌استارت + nginx هماهنگ
 # دسترسی:  https://panel.example.ir/hub/
-sudo ratholectl hub status
-sudo ratholectl hub off              # برداشتن از nginx
+sudo ratholectl hub status           # وضعیت سرویس ratholehub و هشدار ناهماهنگی پورت را هم نشان می‌دهد
+sudo ratholectl hub off              # برداشتن از nginx (سرویس روی 127.0.0.1 روشن می‌ماند)
 ```
 
 > چون با `hub on` پنل عمومی می‌شود، مطمئن شو **رمز قوی** گذاشته‌ای.

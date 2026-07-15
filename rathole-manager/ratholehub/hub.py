@@ -238,6 +238,8 @@ def build_iran_cmd(action, a):
     if action == "fakeweb_rm":     return ["ratholectl", "fakeweb", "rm"]
     if action == "fakeweb_status": return ["ratholectl", "fakeweb", "status"]
     if action == "restart":        return ["ratholectl", "restart"]
+    if action == "status":         return ["ratholectl", "status", "--json"]
+    if action == "paths":          return ["ratholectl", "paths"]
     # ---- damnh / gvahi TLS ----
     if action == "tls_info":   return ["ratholectl", "info"]
     if action == "tls_certs":  return ["ratholectl", "certs"]
@@ -676,6 +678,27 @@ def mock_run(server, cmd_args):
                 "--------------------------------------------------------------\n"
                 "trk01          1005     8444         -          https://d/trk01\n"
                 "gamenodetrk    1007     2101         7001       https://d/gamenodetrk", "err": ""}
+    if j == "ratholectl status --json":
+        return {"rc": 0, "out": json.dumps({
+            "domain": "rp01.l1t.ir", "public_ip": "5.202.4.40",
+            "transport": "websocket+TLS (443)",
+            "ports": {"control": 2333, "fake": 8080, "sub": 2096, "internal": 8443,
+                      "plain": None, "direct": None, "hub": 8088, "noise": 2334},
+            "direct_header": "X-Cdn-Id",
+            "cert": {"fullchain": "/etc/letsencrypt/live/rp01.l1t.ir/fullchain.pem",
+                     "key": "/etc/letsencrypt/live/rp01.l1t.ir/privkey.pem",
+                     "exists": "yes", "expiry": "Oct 12 09:00:00 2026 GMT", "self_signed": "no"},
+            "services": {"rathole_server": "yes", "nginx": "yes", "nginx_config_ok": "yes", "noise": "yes"},
+            "sni_count": 1, "node_count": 2,
+            "nodes": [{"name": "trk01", "port": 1005, "inbound_port": 8444, "api_local_port": None, "sni": None},
+                      {"name": "gamenodetrk", "port": 1007, "inbound_port": 2101, "api_local_port": 7001, "sni": "gmtrk.l1t.ir"}]
+        }), "err": ""}
+    if j == "ratholectl paths":
+        return {"rc": 0, "out": "──────── masir-e config-ha va file-ha ────────\n"
+                "  ✓  state.json             /etc/rathole-manager/state.json\n"
+                "  ✓  server.toml            /etc/rathole/server.toml\n"
+                "  ✓  nginx rathole.conf     /etc/nginx/conf.d/rathole.conf\n"
+                "  ✓  cert fullchain         /etc/letsencrypt/live/rp01.l1t.ir/fullchain.pem", "err": ""}
     if j == "ratholectl kcp status":
         return {"rc": 0, "out": "kcp: roshan  UDP :443 → 127.0.0.1:2333  (profile: balanced)\n"
                 "  estetar: UDP/443 ~ QUIC/HTTP3\n  service: active\n  gvshdadn UDP:443: blh", "err": ""}
@@ -1525,6 +1548,13 @@ const DICT={
   pw_changed:'ramz taghir kard ✓',tok_applied:'token jadid emal shod ✓',need_newpw:'ramz jadid ra vared kon',
   t_audit:'log faaliat (100 morede akhir)',no_audit:'chizi sabt nashode.',c_time:'zaman',c_user:'karbar',c_action:'amaliat',
   domain_tls:'damnh / TLS',manage:'modiriat',domain_hint:'taghir damnh, masir gvahi, ya greftan gvahi Let\'s Encrypt. baraye damnhi dovom az bakhsh game (SNI) estefade kon.',
+  status_btn:'vaziat',status_err:'khorooji-ye status khande nashod.',
+  st_domain:'damnh',st_ip:'IP omomi',st_transport:'transport-e faal',st_services:'service-ha',st_ports:'port-ha',
+  st_ok:'salem',st_bad:'khata',st_cert:'gvahi (TLS)',st_cert_ok:'mojood',st_cert_missing:'peyda nashod',st_selfsigned:'self-signed!',
+  st_nodes:'node-ha',st_no_nodes:'hich node-i ezafe nashode.',
+  st_p_443:'vrvdi-ye asli (nginx TLS/SNI)',st_p_control:'kontrol-e rathole (lokal)',st_p_fake:'sait-e fik/panel (lokal)',
+  st_p_sub:'sabaskripshn (lokal)',st_p_internal:'panel-e dakheli (posht-e SNI)',st_p_plain:'plain (ws bedoon TLS)',
+  st_p_direct:'direct-IP (header)',st_p_hub:'hub (lokal, zir /hub/)',st_p_noise:'noise (ramznegari-shode)',
   dt_show:'namayesh feli',dt_hint:'khorooji dar toast',dt_domain:'damnh asli',dt_fc:'masir fullchain',dt_key:'masir privkey',
   dt_le:'greftan gvahi (domain/email)',dt_get:'begir',dt_apply:'emal (regen)',
   dt_list:'gvahihaye mojood rooye in server:',dt_active:'faal',dt_expiry:'enghza',dt_none:'gvahii peyda nashod.',
@@ -1617,6 +1647,13 @@ const DICT={
   pw_changed:'Password changed ✓',tok_applied:'New token applied ✓',need_newpw:'Enter the new password',
   t_audit:'Activity log (last 100)',no_audit:'Nothing logged yet.',c_time:'Time',c_user:'User',c_action:'Action',
   domain_tls:'Domain / TLS',manage:'Manage',domain_hint:'Change domain, cert paths, or obtain a Let\'s Encrypt cert. For a second domain use the Game (SNI) section.',
+  status_btn:'Status',status_err:'Could not read status output.',
+  st_domain:'Domain',st_ip:'Public IP',st_transport:'Active transport',st_services:'Services',st_ports:'Ports',
+  st_ok:'ok',st_bad:'error',st_cert:'Certificate (TLS)',st_cert_ok:'present',st_cert_missing:'not found',st_selfsigned:'self-signed!',
+  st_nodes:'Nodes',st_no_nodes:'No nodes added.',
+  st_p_443:'main ingress (nginx TLS/SNI)',st_p_control:'rathole control (local)',st_p_fake:'fake site/panel (local)',
+  st_p_sub:'subscription (local)',st_p_internal:'internal panel (behind SNI)',st_p_plain:'plain (ws no TLS)',
+  st_p_direct:'direct-IP (header)',st_p_hub:'hub (local, under /hub/)',st_p_noise:'noise (encrypted)',
   dt_show:'Show current',dt_hint:'output in toast',dt_domain:'Main domain',dt_fc:'fullchain path',dt_key:'privkey path',
   dt_le:'Obtain cert (domain/email)',dt_get:'Get',dt_apply:'Apply (regen)',
   dt_list:'Certificates on this server:',dt_active:'active',dt_expiry:'expiry',dt_none:'No certificates found.',
@@ -1898,6 +1935,7 @@ function renderServerPage(n){
    <div class="btns">
      <button class="gh" onclick="loadOv('${h(n)}')">↻</button>
      <button class="gh" onclick="showDetails('${h(n)}')">${t('details')}</button>
+     ${s.role==='iran'?`<button class="g" onclick="statusModal('${h(n)}')">${t('status_btn')}</button>`:''}
      <button class="s" onclick="doDeploy('${h(n)}')">${t('update')}</button>
      <button class="s" onclick="run('${h(n)}','tune')">tune</button>
      <button class="gh" onclick="editServer('${h(n)}')">${t('edit_server')}</button>
@@ -2404,6 +2442,45 @@ async function doDeploy(n){if(!confirm(t('cf_deploy')+' '+n+' ?'))return; run(n,
 async function showDetails(n){toast(t('loading_det'));
  const {j}=await api('GET','api/servers/'+n+'/details');
  outModal('details · '+n, j.text||JSON.stringify(j));}
+// ---------- dashboard-e vaziat (mesl-e panel-e VPN): status --json ra ziba render mikonad ----------
+function stDot(v){return '<span class="dot '+(v==='yes'?'d-ok':'d-bad')+'"></span>';}
+async function statusModal(n){toast(t('loading'));
+ const {j}=await api('POST','api/servers/'+n+'/action',{action:'status',args:{}});
+ let d=null; try{d=JSON.parse(j&&j.out||'');}catch(e){}
+ if(!d){outModal('status · '+n,((j&&j.cmd?'$ '+j.cmd+'\\n':'')+((j&&j.out)||'')+((j&&j.err)?'\\n'+j.err:'')).trim()||t('status_err'));return;}
+ const P=d.ports||{}, C=d.cert||{}, S=d.services||{};
+ const portRow=(port,lbl)=>port?`<tr><td class="mono">${h(String(port))}</td><td>${h(lbl)}</td></tr>`:'';
+ const certLine=C.exists==='yes'
+   ?`${stDot('yes')} ${t('st_cert_ok')} — ${h(C.expiry||'?')}`+(C.self_signed==='yes'?` <span class="badge" style="background:#7f1d1d">${t('st_selfsigned')}</span>`:'')
+   :`${stDot('no')} <span style="color:#f87171">${t('st_cert_missing')}: ${h(C.fullchain||'')}</span>`;
+ let nodes='';
+ (d.nodes||[]).forEach(x=>{const sni=(x.sni&&x.sni!=='-');
+   const url=sni?('SNI: '+h(x.sni)):('https://'+h(d.domain||'')+'/'+h(x.name));
+   nodes+=`<tr><td class="mono">${h(x.name)}</td><td class="mono">${h(String(x.port))}</td><td class="mono">${h(String(x.inbound_port))}</td><td class="mono" style="font-size:12px">${url}</td></tr>`;});
+ if(!nodes)nodes=`<tr><td colspan="4" class="sub">${t('st_no_nodes')}</td></tr>`;
+ modal(`<h3>${t('status_btn')} · ${h(n)}</h3>
+  <div class="row"><label>${t('st_domain')}</label><span class="mono">${h(d.domain||'—')}</span></div>
+  <div class="row"><label>${t('st_ip')}</label><span class="mono">${h(d.public_ip||'?')}</span></div>
+  <div class="row"><label>${t('st_transport')}</label><span class="mono">${h(d.transport||'')}</span></div>
+  <h4 style="margin:12px 0 4px">${t('st_services')}</h4>
+  <div class="mono">${stDot(S.rathole_server)} rathole-server &nbsp; ${stDot(S.nginx)} nginx (${S.nginx_config_ok==='yes'?t('st_ok'):'<span style=color:#f87171>'+t('st_bad')+'</span>'})${S.noise&&S.noise!=='off'?' &nbsp; '+stDot(S.noise)+' noise':''}</div>
+  <h4 style="margin:12px 0 4px">${t('st_ports')}</h4>
+  <table><tr><th>PORT</th><th></th></tr>
+   ${portRow(443,'443 — '+t('st_p_443'))}
+   ${portRow(P.control,t('st_p_control'))}
+   ${portRow(P.fake,t('st_p_fake'))}
+   ${portRow(P.sub,t('st_p_sub'))}
+   ${d.sni_count>0?portRow(P.internal,t('st_p_internal')):''}
+   ${portRow(P.plain,t('st_p_plain'))}
+   ${portRow(P.direct,t('st_p_direct')+' ('+h(d.direct_header||'')+')')}
+   ${portRow(P.hub,t('st_p_hub'))}
+   ${portRow(P.noise,t('st_p_noise'))}
+  </table>
+  <h4 style="margin:12px 0 4px">${t('st_cert')}</h4>
+  <div class="mono" style="font-size:13px">${certLine}</div>
+  <h4 style="margin:12px 0 4px">${t('st_nodes')} (${(d.nodes||[]).length})</h4>
+  <table><tr><th>NAME</th><th>PORT</th><th>INBOUND</th><th>USER URL</th></tr>${nodes}</table>
+  <div class="row" style="margin-top:12px"><button class="gh" onclick="closeModal()">${t('close')}</button></div>`);}
 function copyText(id){const el=$(id);if(!el)return;const x=el.textContent;
  if(navigator.clipboard&&navigator.clipboard.writeText){navigator.clipboard.writeText(x).then(()=>toast(t('copied')),()=>toast('copy?'));}
  else{const r=document.createRange();r.selectNode(el);getSelection().removeAllRanges();getSelection().addRange(r);try{document.execCommand('copy');toast(t('copied'));}catch(e){toast('copy?');}}}

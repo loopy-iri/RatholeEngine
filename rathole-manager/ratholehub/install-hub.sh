@@ -32,8 +32,11 @@ log "bundle baraye deploy amade shod: $BUNDLE_DIR"
 # tvlid config fght agar naboodan (ta token/ramz mojood pak nshvd)
 if [ ! -f "$CONF_DIR/config.json" ]; then
   API_TOKEN="$(openssl rand -hex 24 2>/dev/null || head -c24 /dev/urandom | xxd -p | tr -d '\n')"
-  read -rsp "ramz mdirit panel ra vared kon: " PW; echo
-  [ -n "$PW" ] || die "ramz khali nemishavad."
+  # ramz ra tty-safe bekhan (zir-e curl|bash ya ejra az ratholectl، stdin momken ast pipe bashad)
+  if [ -t 0 ]; then read -rsp "ramz mdirit panel ra vared kon: " PW; echo
+  elif [ -r /dev/tty ]; then read -rsp "ramz mdirit panel ra vared kon: " PW </dev/tty; echo
+  else PW=""; fi
+  [ -n "$PW" ] || die "ramz khali nemishavad (bedoon tty؟ dasti ejra kon: sudo bash install-hub.sh)."
   PWHASH="$(printf '%s' "$PW" | sha256sum | cut -d' ' -f1)"
   cat > "$CONF_DIR/config.json" <<EOF
 {
@@ -101,7 +104,8 @@ echo "  (ya dasti: mohtava-ye bala ra be /root/.ssh/authorized_keys an server ez
 echo "baad az kpi, tst:  ssh -i $KEY root@<server_ip> 'ratholenode show || ratholectl ls'"
 
 # ---------- ikparchgi khodkar ba nginx (agar hamin server panel Iran ast) ----------
-if command -v ratholectl >/dev/null 2>&1 && [ -f /etc/rathole-manager/state.json ]; then
+# agar az dakhel-e `ratholectl hub on` seda shode bashim، khodesh nginx ra tanzim mikonad — dobare nazan
+if [ -z "${RATHOLECTL_HUB_FROM_CTL:-}" ] && command -v ratholectl >/dev/null 2>&1 && [ -f /etc/rathole-manager/state.json ]; then
   if ratholectl hub on "$PORT" >/dev/null 2>&1; then
     DOMAIN="$(sed -n 's/.*"domain"[^"]*"\([^"]*\)".*/\1/p' /etc/rathole-manager/state.json | head -1)"
     log "panel khodkar psht nginx gharar grft: https://${DOMAIN:-<domain>}/hub/"
