@@ -36,13 +36,46 @@ jobs:
           cp install.sh dist/
           ls -lh dist/
 
+      # note-haye release az CHANGELOG.md: bakhsh-e hamin tag (## [X.Y.Z]) estekhraj mishavad.
+      # agar bakhsh-e tag dar CHANGELOG nabashad, be note-haye khodkar-e GitHub bargasht mikonim.
+      - name: Extract release notes from CHANGELOG.md
+        id: notes
+        run: |
+          TAG="${GITHUB_REF_NAME}"
+          VER="${TAG#v}"
+          TITLE="RatholeEngine ${TAG}"
+          BODY=""
+          if [ -f CHANGELOG.md ]; then
+            BODY="$(awk -v ver="$VER" '
+              index($0, "## [" ver "]") == 1 {on=1; next}
+              on && /^## /  {exit}
+              on && /^\[/   {exit}
+              on            {print}
+            ' CHANGELOG.md)"
+          fi
+          if [ -n "$(printf '%s' "$BODY" | tr -d '[:space:]')" ]; then
+            echo "found=1" >> "$GITHUB_OUTPUT"
+          else
+            echo "found=0" >> "$GITHUB_OUTPUT"
+            echo "::warning::bakhshe [$VER] dar CHANGELOG.md nist; az note-haye khodkar estefade mishavad."
+          fi
+          echo "title=$TITLE" >> "$GITHUB_OUTPUT"
+          {
+            echo "body<<RH_EOF"
+            printf '%s\n' "$BODY"
+            echo "RH_EOF"
+          } >> "$GITHUB_OUTPUT"
+
       - name: Publish GitHub Release
         uses: softprops/action-gh-release@v2
         with:
+          name: ${{ steps.notes.outputs.title }}
+          body: ${{ steps.notes.outputs.found == '1' && steps.notes.outputs.body || '' }}
           files: |
             dist/rathole-manager.zip
             dist/rathole-manager.tar.gz
             dist/bootstrap.sh
             dist/install.sh
           fail_on_unmatched_files: false
-          generate_release_notes: true
+          # agar CHANGELOG bakhsh-e in tag ra nadasht, GitHub khodesh note misazad
+          generate_release_notes: ${{ steps.notes.outputs.found != '1' }}
