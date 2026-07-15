@@ -35,7 +35,18 @@ log(){ printf '%s %s\n' "$(c_g '[+]')" "$*"; }
 warn(){ printf '%s %s\n' "$(c_y '[*]')" "$*"; }
 err(){ printf '%s %s\n' "$(c_r '[!]')" "$*" >&2; }
 die(){ err "$*"; exit 1; }
-ask_yn(){ local p="$1" a; read -rp "$p [y/N]: " a; [[ "$a" =~ ^[Yy]$ ]]; }
+# read-e amn: agar stdin terminal nabashad (masalan curl|bash ya exec az bootstrap),
+# az /dev/tty bekhan ta prompt-haye taamoli kar konand. agar hich tty nabashad, khali.
+rth_read(){
+  # estefade: rth_read VAR "prompt"
+  local __v="$1" __p="${2:-}" __a=""
+  if [ -t 0 ]; then read -rp "$__p" __a
+  elif [ -r /dev/tty ]; then read -rp "$__p" __a </dev/tty
+  else __a=""; fi
+  printf -v "$__v" '%s' "$__a"
+}
+has_tty(){ [ -t 0 ] || [ -r /dev/tty ]; }
+ask_yn(){ local a; rth_read a "$1 [y/N]: "; [[ "$a" =~ ^[Yy]$ ]]; }
 
 need_root(){ [ "$(id -u)" -eq 0 ] || die "bayad ba root ejra shavad (sudo)."; }
 need_bin(){ command -v "$1" >/dev/null 2>&1 || die "niaz be '$1' ast; aval install-panel.sh ra ejra kon."; }
@@ -163,24 +174,33 @@ cmd_init(){
 
   # halat restore: agar file backup dade shode ya (taamoli) karbar masir dad
   if [ "$interactive" -eq 1 ] && [ -z "$restore_file" ]; then
-    read -rp "adres file backup baraye restore (khali = nasb tazh): " restore_file
+    rth_read restore_file "adres file backup baraye restore (khali = nasb tazh): "
   fi
   if [ -n "$restore_file" ]; then
     cmd_restore "$restore_file"
     return
   fi
 
+  # agar taamoli ast vali hich tty nist (curl|bash bedoon-e --domain), natavan porsid → rahnama
+  if [ "$interactive" -eq 1 ] && ! has_tty; then
+    err "domain dade nashode va terminal baraye porsesh dar dastres nist."
+    err "ba flag ejra kon, masalan:"
+    err "   sudo ratholectl init --domain <d> --fullchain <fc> --key <key>"
+    err "ya nasb ra ba install-panel.sh hamrah-e hamin flag-ha bede."
+    die "init bedoon-e domain momken nist."
+  fi
+
   if [ "$interactive" -eq 1 ]; then
-    read -rp "damnh (masalan btli.ir): " domain
+    rth_read domain "damnh (masalan btli.ir): "
     [ -n "$domain" ] || die "damnh alzami ast."
-    read -rp "masir fullchain.pem [/root/cert/${domain}/fullchain.pem]: " cert_fc
-    read -rp "masir privkey.pem [/root/cert/${domain}/privkey.pem]: " cert_key
-    read -rp "file config nginx baraye tvlid/riplis [/etc/nginx/conf.d/rathole.conf]: " nconf
-    read -rp "port kontroli lvkal rathole [2333]: " ctrl
-    read -rp "port sait fik/panel (default) [8080]: " fake
-    read -rp "port sabaskripshn [2096]: " sub
-    read -rp "shrva shmarh port dita [1001]: " dstart
-    read -rp "shrva shmarh port mdirit(api) [7001]: " astart
+    rth_read cert_fc "masir fullchain.pem [/root/cert/${domain}/fullchain.pem]: "
+    rth_read cert_key "masir privkey.pem [/root/cert/${domain}/privkey.pem]: "
+    rth_read nconf "file config nginx baraye tvlid/riplis [/etc/nginx/conf.d/rathole.conf]: "
+    rth_read ctrl "port kontroli lvkal rathole [2333]: "
+    rth_read fake "port sait fik/panel (default) [8080]: "
+    rth_read sub "port sabaskripshn [2096]: "
+    rth_read dstart "shrva shmarh port dita [1001]: "
+    rth_read astart "shrva shmarh port mdirit(api) [7001]: "
   fi
 
   # pishfrzha

@@ -42,6 +42,14 @@ if [ -d /etc/rathole ] && [ -z "$(ls -A /etc/rathole 2>/dev/null)" ]; then rmdir
 # ---------- hazf abzar ----------
 rm -f /usr/local/bin/ratholenode
 log "ratholenode hazf shod."
+# common.sh-e eshteraki (agar panel/hub-e digari rooye hamin server nist, hazf kon)
+if [ -f /usr/local/share/rathole/common.sh ] \
+   && [ ! -f /etc/systemd/system/rathole-server.service ] \
+   && [ ! -f /opt/ratholehub/hub.py ]; then
+  rm -f /usr/local/share/rathole/common.sh
+  rmdir /usr/local/share/rathole 2>/dev/null || true
+  log "common.sh hazf shod."
+fi
 
 # ---------- purge ekhtiari ----------
 if [ "$PURGE" -eq 1 ]; then

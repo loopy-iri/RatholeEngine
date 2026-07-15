@@ -9,6 +9,15 @@ release.yml hamin bakhsh ra be onvan-e title/body-e GitHub Release montasher mik
 
 ## [Unreleased]
 
+## [1.4.2] - 2026-07-15
+
+### Fixed
+- **ratholectl init:** prompt-haye taamoli (`read`) az stdin mikhandand؛ zir-e `curl|bash` ya `exec` az bootstrap ke stdin pipe ast، `read` foran EOF migereft → `damnh alzami ast` va `init shekast khord`. hala helper-e `rth_read` az `/dev/tty` mikhanad (agar stdin terminal nabashad)؛ va agar hich tty nabashad payam-e vazeh mide ke ba `--domain ...` ejra kon
+
+### Added
+- **bootstrap.sh:** gozine-ye **hazf kamel (uninstall)** — menu (gozine 7) + flag-haye `--uninstall`/`--remove`/`--purge`. naghsh-haye nasb-shode (panel/node/hub) ra tashkhis mide va uninstaller-e har kodam ra ejra mikonad (hub mostaghim، chون uninstaller-e joda nadarad)؛ `--purge` binary-e rathole + config-e hub ra ham hazf mikonad
+- **uninstall-panel.sh / uninstall-node.sh:** hazf-e `common.sh` (agar naghsh-e digari rooye hamin server nabashad) + config-e stream/SNI
+
 ## [1.4.1] - 2026-07-15
 
 ### Fixed
@@ -77,7 +86,8 @@ release.yml hamin bakhsh ra be onvan-e title/body-e GitHub Release montasher mik
   - transport-ha: websocket+TLS / kcp / plain / noise / game-SNI
   - install/update/rollback: `install.sh`، `bootstrap.sh`، `update.sh` ba snapshot + health-check
 
-[Unreleased]: https://github.com/loopy-iri/RatholeEngine/compare/v1.4.1...HEAD
+[Unreleased]: https://github.com/loopy-iri/RatholeEngine/compare/v1.4.2...HEAD
+[1.4.2]: https://github.com/loopy-iri/RatholeEngine/compare/v1.4.1...v1.4.2
 [1.4.1]: https://github.com/loopy-iri/RatholeEngine/compare/v1.4.0...v1.4.1
 [1.4.0]: https://github.com/loopy-iri/RatholeEngine/compare/v1.3.0...v1.4.0
 [1.3.0]: https://github.com/loopy-iri/RatholeEngine/compare/v1.2.0...v1.3.0

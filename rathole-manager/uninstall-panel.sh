@@ -89,6 +89,16 @@ fi
 # ---------- hazf abzar ----------
 rm -f /usr/local/bin/ratholectl
 log "ratholectl hazf shod."
+# common.sh-e eshteraki (agar node/hub-e digari rooye hamin server nist, hazf kon)
+if [ -f /usr/local/share/rathole/common.sh ] \
+   && [ ! -f /etc/systemd/system/rathole-client.service ] \
+   && [ ! -f /opt/ratholehub/hub.py ]; then
+  rm -f /usr/local/share/rathole/common.sh
+  rmdir /usr/local/share/rathole 2>/dev/null || true
+  log "common.sh hazf shod."
+fi
+# config-e stream/SNI (game mode) agar sakhte shode bood
+rm -f /etc/nginx/stream.d/rathole-stream.conf 2>/dev/null || true
 
 # ---------- purge ekhtiari ----------
 if [ "$PURGE" -eq 1 ]; then

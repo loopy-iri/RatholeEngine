@@ -11,6 +11,8 @@
 #   sudo bash bootstrap.sh --url https://host/rathole-manager.zip --panel ...
 #   sudo bash bootstrap.sh --local ./rathole-manager.zip --no-run
 #   sudo bash bootstrap.sh --local ./rathole-manager.zip --update   # update kamel (khodkar panel/node/hub)
+#   sudo bash bootstrap.sh --uninstall            # hazf kamel (panel/node/hub) ba taid
+#   sudo bash bootstrap.sh --purge --yes          # hazf kamel + binary rathole/config hub، bedoon porsesh
 #
 # taamoli: fght `sudo bash bootstrap.sh` va baghie ra miporsad (menu shamel gozine update ham hast).
 
@@ -23,6 +25,7 @@ MODE=""
 RUN=1
 ASSUME_YES=0
 ROLLBACK_TS=""
+PURGE=0
 PASS_ARGS=()
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" 2>/dev/null && pwd || echo "$PWD")"
@@ -56,6 +59,8 @@ while [ $# -gt 0 ]; do
     --rollback) MODE="rollback"; shift
                 if [ $# -gt 0 ] && [ "${1#--}" = "$1" ]; then ROLLBACK_TS="$1"; shift; fi ;;
     --list-backups) MODE="listbackups"; shift;;
+    --uninstall|--remove) MODE="uninstall"; shift;;
+    --purge)   MODE="uninstall"; PURGE=1; shift;;
     --no-run)  RUN=0; shift;;
 
     --yes|-y)  ASSUME_YES=1; shift;;
@@ -194,6 +199,60 @@ installed_roles(){ # esm-e naghsh-haye nasb-shode baraye namayesh
   echo "${r[*]:-}"
 }
 
+# ---------- hazf kamel (uninstall) ----------
+# har naghsh-e nasb-shode ra ba uninstaller-e khodesh hazf mikonad (panel/node),
+# va hub ra inja mostaghim (chون uninstaller-e joda nadarad). --purge/-y forward mishavad.
+uninstall_hub(){
+  log "hazf hub (ratholehub)..."
+  systemctl disable --now ratholehub 2>/dev/null || true
+  rm -f /etc/systemd/system/ratholehub.service
+  systemctl daemon-reload 2>/dev/null || true
+  rm -rf /opt/ratholehub
+  if [ "$PURGE" -eq 1 ]; then
+    warn "purge: pooshe-ye config-e hub (/etc/ratholehub — shamel token/ramz) ham hazf mishavad."
+    rm -rf /etc/ratholehub
+  else
+    warn "config-e hub (/etc/ratholehub) baghi mand (baraye hazf-e kamel: --purge)."
+  fi
+  # location-e /hub/ dar nginx (agar ratholectl hub on sakhte bood)
+  command -v ratholectl >/dev/null 2>&1 && ratholectl hub off 2>/dev/null || true
+  log "hub hazf shod."
+}
+
+run_uninstall(){
+  local dir="$1" roles f rc=0
+  roles="$(installed_roles)"
+  if [ -z "$roles" ]; then
+    warn "hich nasb-e rathole-ei (panel/node/hub) peyda nashod؛ chizi baraye hazf nist."
+    exit 0
+  fi
+  echo; warn "$(c_r 'HAZF-E KAMEL') — naghsh-haye nasb-shode: $(c_y "$roles")"
+  warn "in kar service-ha، config-ha va state ra hazf mikonad. (gvahi/TLS dast nemikhorad.)"
+  [ "$PURGE" -eq 1 ] && warn "purge faal ast: binary-e rathole va config-e hub ham hazf mishavand."
+  ask_yn "motmaen hasti hazf shavad?" || { log "lghv shod."; exit 0; }
+
+  local flags=(--yes); [ "$PURGE" -eq 1 ] && flags+=(--purge)
+
+  case " $roles " in *" panel "*)
+    f="$dir/uninstall-panel.sh"
+    [ -f "$f" ] || f="$(find "$dir" -maxdepth 3 -name 'uninstall-panel.sh' -print -quit 2>/dev/null)"
+    if [ -n "$f" ] && [ -f "$f" ]; then log "ejra-ye uninstall-panel.sh..."; bash "$f" "${flags[@]}" || rc=1
+    else err "uninstall-panel.sh peyda nashod."; rc=1; fi ;;
+  esac
+  case " $roles " in *" node "*)
+    f="$dir/uninstall-node.sh"
+    [ -f "$f" ] || f="$(find "$dir" -maxdepth 3 -name 'uninstall-node.sh' -print -quit 2>/dev/null)"
+    if [ -n "$f" ] && [ -f "$f" ]; then log "ejra-ye uninstall-node.sh..."; bash "$f" "${flags[@]}" || rc=1
+    else err "uninstall-node.sh peyda nashod."; rc=1; fi ;;
+  esac
+  case " $roles " in *" hub "*) uninstall_hub || rc=1 ;; esac
+
+  echo
+  if [ "$rc" -eq 0 ]; then log "hazf-e kamel anjam shod."
+  else err "hazf ba chand khata tamam shod؛ balaha ra barresi kon."; fi
+  exit "$rc"
+}
+
 # ---------- entekhab halat va grftn etelaat (taamoli) ----------
 choose_mode(){
   echo; echo "$(c_g 'halat nasb ra entekhab kon:')"
@@ -203,12 +262,13 @@ choose_mode(){
   echo "  4) fght amade-sazi (bedoon ejra-ye nasab)"
   echo "  5) rollback (bazgasht be akharin snapshot-e ghabl az update)"
   echo "  6) list-e backup-ha (snapshot-haye mojood)"
+  echo "  7) $(c_r 'hazf kamel') (uninstall — panel/node/hub + config/state)"
   local m def=""
   if detect_installed; then
     def="3"
     echo; warn "nasb-e mojood tashkhis dade shod: $(c_y "$(installed_roles)") → pishfarz: update"
   fi
-  rdp "entekhab [1/2/3/4/5/6]${def:+ (pishfarz: $def)}: " m
+  rdp "entekhab [1/2/3/4/5/6/7]${def:+ (pishfarz: $def)}: " m
   m="${m:-$def}"
   case "$m" in
     1) MODE="panel" ;;
@@ -217,6 +277,7 @@ choose_mode(){
     4) RUN=0 ;;
     5) MODE="rollback" ;;
     6) MODE="listbackups" ;;
+    7) MODE="uninstall" ;;
     *) die "entekhab namotabar." ;;
   esac
 }
@@ -242,6 +303,18 @@ main(){
   if [ "$MODE" = "rollback" ] || [ "$MODE" = "listbackups" ]; then
     local u; if u="$(find_update_sh)"; then exec_update_action "$u"; fi
     warn "update.sh-e mahalli peyda nashod؛ baste ra amade mikonam..."
+  fi
+
+  # uninstall: uninstaller-ha maamoolan az nasb-e ghabli mojood-and → bedoon download hazf kon.
+  # agar peyda nashodand (masalan nasb-e nimeh-kareh)، be amade-sazi-ye baste edame midahim.
+  if [ "$MODE" = "uninstall" ]; then
+    local d
+    for d in "$INSTALL_DIR" "$SCRIPT_DIR" "$SCRIPT_DIR/rathole-manager"; do
+      if [ -f "$d/uninstall-panel.sh" ] || [ -f "$d/uninstall-node.sh" ]; then
+        run_uninstall "$d"   # exit mikonad
+      fi
+    done
+    warn "uninstaller-e mahalli peyda nashod؛ baste ra amade mikonam..."
   fi
 
   install_prereqs
@@ -301,6 +374,8 @@ main(){
     rollback|listbackups)
       # baste amade shod (chون update.sh-e mahalli naboud); hala action ra ejra kon
       exec_update_action "$INSTALL_DIR/update.sh" ;;
+    uninstall)
+      run_uninstall "$INSTALL_DIR" ;;
     update)
       # update kamel: update.sh khodesh panel/node/hub ra tashkhis mide va hameye ejza ra berooz mikonad
       log "ejra-ye update kamel ba snapshot + rollback-e khodkar..."
