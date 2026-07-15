@@ -90,6 +90,8 @@ curl -fsSL https://raw.githubusercontent.com/loopy-iri/RatholeEngine/main/instal
 
 Offline / local bundle (no download) still works via `bootstrap.sh` directly — see [`docs/README.fa.md`](docs/README.fa.md).
 
+> **Re-running the panel installer** is safe: it detects a previous or partial install, prints a ✓/✗ status per component, and offers **resume** (complete missing pieces, keep state — `--repair`, the default) or **fresh** (back up + wipe config/state, reinstall — `--fresh`). Under `curl … | bash` (no TTY) it defaults to the safe resume path.
+
 Then add nodes from the Iran panel:
 
 ```bash
@@ -114,6 +116,18 @@ sudo bash update.sh --no-rollback         # update but never auto-revert (snapsh
 ```
 
 Full CLI reference and install flows (Persian): [`docs/README.fa.md`](docs/README.fa.md).
+
+## Uninstall
+
+`bootstrap.sh` auto-detects which roles are installed (panel / node / hub) and runs the matching uninstaller for each:
+
+```bash
+sudo bash bootstrap.sh --uninstall        # remove installed roles (asks to confirm)
+sudo bash bootstrap.sh --purge --yes      # + rathole binary and hub config, no prompt
+#   or per-role directly:  sudo bash uninstall-panel.sh [--purge] [--yes]
+```
+
+TLS certs are never removed. The shared `common.sh` is removed only when no other role remains on the host. The same option is item 7 in the interactive `bootstrap.sh` menu.
 
 ## Documentation
 
