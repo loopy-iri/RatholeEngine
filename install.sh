@@ -9,6 +9,10 @@
 #   curl -fsSL https://raw.githubusercontent.com/loopy-iri/RatholeEngine/main/install.sh | sudo bash -s -- --update
 #   curl -fsSL https://raw.githubusercontent.com/loopy-iri/RatholeEngine/main/install.sh | sudo bash -s -- --rollback
 #
+# bedoon argument (curl ... | sudo bash):
+#   - agar nasb-e mojood (panel/node/hub) tashkhis dade shavad → pishfarz UPDATE ast
+#   - vagarna menu-ye taamoli az /dev/tty porside mishavad (nasb-e jadid)
+#
 # repo slug pishfarz loopy-iri/RatholeEngine ast؛ baraye estefade az fork-e khodet ba mtghir-e mohiti
 # override kon:   RATHOLE_GH="youruser/yourrepo" curl -fsSL .../install.sh | sudo bash -s -- ...
 set -euo pipefail

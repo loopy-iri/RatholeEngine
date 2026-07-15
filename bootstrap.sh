@@ -34,8 +34,15 @@ log(){ printf '%s %s\n' "$(c_g '[+]')" "$*"; }
 warn(){ printf '%s %s\n' "$(c_y '[*]')" "$*"; }
 err(){ printf '%s %s\n' "$(c_r '[!]')" "$*" >&2; }
 die(){ err "$*"; exit 1; }
-ask_yn(){ [ "$ASSUME_YES" -eq 1 ] && return 0; local a; read -rp "$1 [Y/n]: " a; [[ -z "$a" || "$a" =~ ^[Yy]$ ]]; }
-is_tty(){ [ -t 0 ]; }
+# zir-e `curl ... | sudo bash` stdin pipe ast na terminal؛ agar /dev/tty baz shavad
+# hanooz mitavanim taamoli beporsim (rdp/ask_yn az /dev/tty mikhanand).
+TTY_DEV=""
+if [ ! -t 0 ] && { : < /dev/tty; } 2>/dev/null; then TTY_DEV="/dev/tty"; fi
+is_tty(){ [ -t 0 ] || [ -n "$TTY_DEV" ]; }
+rdp(){ # read -rp ke ba stdin-e pipe ham kar mikonad: $1=prompt $2=nam-e motghayer
+  if [ -n "$TTY_DEV" ]; then IFS= read -rp "$1" "$2" < "$TTY_DEV"; else IFS= read -rp "$1" "$2"; fi
+}
+ask_yn(){ [ "$ASSUME_YES" -eq 1 ] && return 0; local a; rdp "$1 [Y/n]: " a; [[ -z "$a" || "$a" =~ ^[Yy]$ ]]; }
 
 # ---------- pars argvmanha ----------
 while [ $# -gt 0 ]; do
@@ -125,7 +132,7 @@ resolve_source(){
   fi
   # 4) chizi nadarim → agar taamoli ast bprs, vagarna khata
   if is_tty; then
-    local ans; read -rp "link baste (URL) ya masir file mahalli: " ans
+    local ans; rdp "link baste (URL) ya masir file mahalli: " ans
     [ -n "$ans" ] || die "mnba baste dade nashod."
     if [ -f "$ans" ]; then SRC_FILE="$ans"; else BUNDLE_URL="$ans"; fi
   else
@@ -173,6 +180,20 @@ find_root(){
   return 1
 }
 
+# ---------- tashkhis nasb-e mojood (baraye update-e khodkar) ----------
+detect_installed(){ # rc=0 agar panel/node/hub ghablan nasb shode bashad
+  [ -d /etc/rathole-manager ] || [ -f /etc/systemd/system/rathole-server.service ] || \
+  [ -f /etc/rathole/node.env ] || [ -f /etc/systemd/system/rathole-client.service ] || \
+  [ -f /opt/ratholehub/hub.py ] || [ -f /etc/systemd/system/ratholehub.service ]
+}
+installed_roles(){ # esm-e naghsh-haye nasb-shode baraye namayesh
+  local r=()
+  { [ -d /etc/rathole-manager ] || [ -f /etc/systemd/system/rathole-server.service ]; } && r+=(panel)
+  { [ -f /etc/rathole/node.env ] || [ -f /etc/systemd/system/rathole-client.service ]; } && r+=(node)
+  { [ -f /opt/ratholehub/hub.py ] || [ -f /etc/systemd/system/ratholehub.service ]; } && r+=(hub)
+  echo "${r[*]:-}"
+}
+
 # ---------- entekhab halat va grftn etelaat (taamoli) ----------
 choose_mode(){
   echo; echo "$(c_g 'halat nasb ra entekhab kon:')"
@@ -182,7 +203,13 @@ choose_mode(){
   echo "  4) fght amade-sazi (bedoon ejra-ye nasab)"
   echo "  5) rollback (bazgasht be akharin snapshot-e ghabl az update)"
   echo "  6) list-e backup-ha (snapshot-haye mojood)"
-  local m; read -rp "entekhab [1/2/3/4/5/6]: " m
+  local m def=""
+  if detect_installed; then
+    def="3"
+    echo; warn "nasb-e mojood tashkhis dade shod: $(c_y "$(installed_roles)") → pishfarz: update"
+  fi
+  rdp "entekhab [1/2/3/4/5/6]${def:+ (pishfarz: $def)}: " m
+  m="${m:-$def}"
   case "$m" in
     1) MODE="panel" ;;
     2) MODE="node" ;;
@@ -198,14 +225,14 @@ choose_mode(){
 prompt_node_args(){
   echo; log "etelaat node ra vared kon (az khorooji 'ratholectl add' rooye panel):"
   local server name token inbound atoken aib
-  read -rp "adres server Iran (masalan panel.example.ir:443): " server
-  read -rp "name node (masalan trk01): " name
-  read -rp "token service: " token
-  read -rp "port inbound Xray rooye node [2087]: " inbound; inbound="${inbound:-2087}"
-  read -rp "token API (akhtiari, khali=rad): " atoken
+  rdp "adres server Iran (masalan panel.example.ir:443): " server
+  rdp "name node (masalan trk01): " name
+  rdp "token service: " token
+  rdp "port inbound Xray rooye node [2087]: " inbound; inbound="${inbound:-2087}"
+  rdp "token API (akhtiari, khali=rad): " atoken
   PASS_ARGS=(--server "$server" --name "$name" --token "$token" --inbound-port "$inbound")
   if [ -n "$atoken" ]; then
-    read -rp "port inbound API node [62050]: " aib; aib="${aib:-62050}"
+    rdp "port inbound API node [62050]: " aib; aib="${aib:-62050}"
     PASS_ARGS+=(--api-token "$atoken" --api-inbound-port "$aib")
   fi
 }
@@ -253,9 +280,14 @@ main(){
   rm -rf "$tmp"
   log "baste amade shod dar: $INSTALL_DIR"
 
-  # entekhab halat agar moshakhas nashode va taamoli hastim
+  # entekhab halat agar moshakhas nashode
   if [ -z "$MODE" ] && [ "$RUN" -eq 1 ]; then
-    if is_tty; then choose_mode; else RUN=0; fi
+    if is_tty; then choose_mode
+    elif detect_installed; then
+      # bedoon terminal (masalan curl | bash az cron/hub): nasb-e mojood → update-e khodkar
+      warn "nasb-e mojood tashkhis dade shod ($(installed_roles)) va terminal nist → update-e khodkar."
+      MODE="update"
+    else RUN=0; fi
   fi
 
   if [ "$RUN" -eq 0 ] || [ -z "$MODE" ]; then
