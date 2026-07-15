@@ -232,16 +232,22 @@ fi
 handle_conflicts(){
   local self="${1:-}"
   log "barresi tadakhol config nginx rooye port 443..."
-  local found=() f
+  local found=() f bn
+  # faghat file-hayi ke nginx vaghean include mikonad: conf.d/*.conf va sites-enabled/*
+  # (file-haye .bak/.orig/.save/.disabled/~ tvst nginx load NEMISHAVAND — hoshdar-e ghalat nadeh)
   while IFS= read -r f; do
-    case "$(basename "$f")" in
+    bn="$(basename "$f")"
+    case "$bn" in
       rathole.conf|rathole-upgrade-map.conf) continue ;;
+      *.bak|*.orig|*.save|*.disabled|*.dpkg-*|*.rpmsave|*~) continue ;;
     esac
     # file hdf ma (haman ke jaish config nvshtim) ra nadidh begir
     [ -n "$self" ] && [ "$f" = "$self" ] && continue
     found+=("$f")
-  done < <(grep -rlE 'listen[[:space:]]+(\[::\]:)?443' \
-            /etc/nginx/sites-enabled /etc/nginx/conf.d 2>/dev/null | sort -u)
+  done < <( { grep -lE 'listen[[:space:]]+(\[::\]:)?443' \
+                /etc/nginx/conf.d/*.conf 2>/dev/null
+              grep -lE 'listen[[:space:]]+(\[::\]:)?443' \
+                /etc/nginx/sites-enabled/* 2>/dev/null; } | sort -u)
 
   if [ "${#found[@]}" -eq 0 ]; then
     log "hich config mtdakhl digari rooye 443 nist."
@@ -307,6 +313,12 @@ else
   # rathole be stdout log mikonad; dar halat-e auto-restart journal khali/dir mimanad.
   # pas binary ra mostaghim ba timeout ejra mikonim ta khata-ye vaghei ra bebinim.
   systemctl stop rathole-server 2>/dev/null || true
+  # pish-barresi: binary vojood darad va ejrapazir ast?
+  if [ ! -x /usr/local/bin/rathole ]; then
+    err "-> /usr/local/bin/rathole vojood nadarad ya ejrapazir nist."
+    ls -l /usr/local/bin/rathole 2>&1 | sed 's/^/    /' >&2 || true
+    chmod +x /usr/local/bin/rathole 2>/dev/null || true
+  fi
   RTH_DIAG="$(RUST_LOG=info timeout 3 /usr/local/bin/rathole /etc/rathole/server.toml 2>&1 | head -20)"
   printf '%s\n' "$RTH_DIAG" | sed 's/^/    /' >&2
   # tashkhis-e ellat-haye shayea az rooye khorooji
@@ -314,19 +326,26 @@ else
     RTH_CTRL="$(jq -r '.control_port // 2333' /etc/rathole-manager/state.json 2>/dev/null)"
     err "-> port-e kontrol ($RTH_CTRL) eshghal ast (ehtemalan yek instans-e rathole-ye ghadimi hanoz balast)."
     err "   barresi: ss -ltnp | grep :$RTH_CTRL    va    pkill -f '/usr/local/bin/rathole'"
+    pkill -f '/usr/local/bin/rathole' 2>/dev/null || true; sleep 1
   elif printf '%s' "$RTH_DIAG" | grep -qi "No such file\|cannot\|Exec format\|not found\|GLIBC"; then
     err "-> binary-e rathole nasazgar ast (memari/glibc) ya server.toml peyda nashod."
     err "   barresi: /usr/local/bin/rathole --version   va   uname -m"
-  elif printf '%s' "$RTH_DIAG" | grep -qi "Listening at"; then
-    err "-> binary salem start shod؛ moshkel az systemd/environment bood."
+  elif printf '%s' "$RTH_DIAG" | grep -qi "Listening at\|Control channel"; then
+    err "-> binary salem start shod va listen kard؛ moshkel az systemd/environment ya race bood (retry mikonim)."
+  elif [ -z "$RTH_DIAG" ]; then
+    err "-> binary hich khorooji nadad (ehtemalan bi-seda crash kard ya timeout). server.toml ra barresi kon:"
+    err "   /usr/local/bin/rathole /etc/rathole/server.toml   (dasti ejra kon va khata ra bebin)"
   fi
   # yek talash-e dobare baad az tashkhis
+  systemctl daemon-reload 2>/dev/null || true
   systemctl start rathole-server 2>/dev/null || true; sleep 1
   if systemctl is-active --quiet rathole-server; then
     log "rathole-server dar talash-e dovom faal shod."
   else
-    err "hanoz start nashod. baad az raf-e moshkel: sudo systemctl restart rathole-server"
-    err "log-e kamel: journalctl -u rathole-server -n 40 --no-pager"
+    err "hanoz start nashod. khorooji-ye vaghei-ye systemd:"
+    systemctl --no-pager --full status rathole-server 2>&1 | head -12 | sed 's/^/    /' >&2 || true
+    journalctl -u rathole-server -n 20 --no-pager 2>&1 | sed 's/^/    /' >&2 || true
+    err "baad az raf-e moshkel: sudo systemctl restart rathole-server"
   fi
 fi
 

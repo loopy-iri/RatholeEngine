@@ -9,6 +9,13 @@ release.yml hamin bakhsh ra be onvan-e title/body-e GitHub Release montasher mik
 
 ## [Unreleased]
 
+## [1.4.4] - 2026-07-15
+
+### Fixed
+- **ratholectl `gen_server_toml` / `gen_noise_server_toml`:** rathole v0.5.0 field-e `services` ra baraye `[server]` **ALZAMI** midanad. vaghti hich node-i ezafe nashode bood، `server.toml` hich `[server.services.*]`-i nadasht → rathole ba `missing field \`services\` for key \`server\`` crash mikard va `rathole-server` start nemishod (status=1/FAILURE، `nginx` rooye 443 salem bood vali tunnel bala nemiamad). hala vaghti service-i nist yek jadval-e khali-ye `[server.services]` neveshte mishavad (baraye har do transport-e websocket va noise) → server.toml-e khali ham motabar ast va rathole-server balafasele bala miayad
+- **install-panel.sh — tashkhis-e tadakhol-e 443:** eskan-e `grep -rlE` file-haye backup mesl-e `rathole.conf.rathole-good.bak` ra ham migereft va hoshdar-e ghalat-e tadakhol midad، dar hali ke nginx faghat `conf.d/*.conf` va `sites-enabled/*` ra include mikonad (file-haye `.bak/.orig/.save/.disabled/~` load NEMISHAVAND). hala eskan mahdood be haman file-haye vaghean-include-shode ast va pasvand-haye backup rad mishavand
+- **install-panel.sh — tashkhis-e start-e rathole:** ezafe shodan-e barresi-ye ejrapazir-boodan-e binary، tashkhis-e khorooji-ye khali، `pkill` khodkar vaghti port eshghal ast، va namayesh-e `systemctl status` + `journalctl`-e vaghei dar talash-e dovom
+
 ## [1.4.3] - 2026-07-15
 
 ### Fixed
@@ -92,7 +99,8 @@ release.yml hamin bakhsh ra be onvan-e title/body-e GitHub Release montasher mik
   - transport-ha: websocket+TLS / kcp / plain / noise / game-SNI
   - install/update/rollback: `install.sh`، `bootstrap.sh`، `update.sh` ba snapshot + health-check
 
-[Unreleased]: https://github.com/loopy-iri/RatholeEngine/compare/v1.4.3...HEAD
+[Unreleased]: https://github.com/loopy-iri/RatholeEngine/compare/v1.4.4...HEAD
+[1.4.4]: https://github.com/loopy-iri/RatholeEngine/compare/v1.4.3...v1.4.4
 [1.4.3]: https://github.com/loopy-iri/RatholeEngine/compare/v1.4.2...v1.4.3
 [1.4.2]: https://github.com/loopy-iri/RatholeEngine/compare/v1.4.1...v1.4.2
 [1.4.1]: https://github.com/loopy-iri/RatholeEngine/compare/v1.4.0...v1.4.1

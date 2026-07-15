@@ -339,6 +339,14 @@ gen_server_toml(){
     echo "[server.transport.websocket]"
     echo "tls = false"
     echo
+    # rathole v0.5.0 field-e 'services' ra ALZAMI midanad; agar hich node/service nabashad,
+    # bayad yek table-e khali [server.services] bedahim vagarna: "missing field services".
+    local svc_count
+    svc_count="$(jq '[.nodes[] | select((.transport // "") != "noise")] | length' "$STATE" 2>/dev/null)"
+    if [ "${svc_count:-0}" -eq 0 ]; then
+      echo "[server.services]"
+      echo
+    fi
     jq -r '.nodes[] | @base64' "$STATE" | while read -r row; do
       _j(){ echo "$row" | base64 -d | jq -r "$1"; }
       local name port token aport atoken
@@ -385,6 +393,13 @@ gen_noise_server_toml(){
     echo "pattern = \"${pat}\""
     echo "local_private_key = \"${priv}\""
     echo
+    # hamchon server-e asli: agar hich node-e noise nabashad, [server.services]-e khali bede.
+    local nsvc_count
+    nsvc_count="$(jq '[.nodes[] | select((.transport // "") == "noise")] | length' "$STATE" 2>/dev/null)"
+    if [ "${nsvc_count:-0}" -eq 0 ]; then
+      echo "[server.services]"
+      echo
+    fi
     jq -r '.nodes[] | @base64' "$STATE" | while read -r row; do
       _j(){ echo "$row" | base64 -d | jq -r "$1"; }
       local name port token aport atoken
