@@ -9,6 +9,8 @@ release.yml hamin bakhsh ra be onvan-e title/body-e GitHub Release montasher mik
 
 ## [Unreleased]
 
+## [1.3.0] - 2026-07-15
+
 ### Added
 - **Hub:** namayesh-e vaziat-e vasl boodan-e node-ha (mesl `doctor`) rooye kart-haye dashboard va safhe-ye node
 - **Hub:** panel-e vaziat-e khod-e server-e hub (uptime / load / RAM / disk / service-ha) rooye dashboard
@@ -58,7 +60,8 @@ release.yml hamin bakhsh ra be onvan-e title/body-e GitHub Release montasher mik
   - transport-ha: websocket+TLS / kcp / plain / noise / game-SNI
   - install/update/rollback: `install.sh`، `bootstrap.sh`، `update.sh` ba snapshot + health-check
 
-[Unreleased]: https://github.com/loopy-iri/RatholeEngine/compare/v1.2.0...HEAD
+[Unreleased]: https://github.com/loopy-iri/RatholeEngine/compare/v1.3.0...HEAD
+[1.3.0]: https://github.com/loopy-iri/RatholeEngine/compare/v1.2.0...v1.3.0
 [1.2.0]: https://github.com/loopy-iri/RatholeEngine/compare/v1.1.0...v1.2.0
 [1.1.0]: https://github.com/loopy-iri/RatholeEngine/compare/v1.0.2...v1.1.0
 [1.0.2]: https://github.com/loopy-iri/RatholeEngine/compare/v1.0.1...v1.0.2
