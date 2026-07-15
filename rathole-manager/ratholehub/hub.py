@@ -153,6 +153,54 @@ def read_audit(limit=100):
     except Exception:
         return []
 
+# ---------- vaziat-e khod-e server-e hub (uptime/load/mem/disk/serviceha) ----------
+_HUB_START = time.time()
+
+def hub_status():
+    # hame-ye bakhsh-ha best-effort hastand; rooye system-haye bedoon /proc ya systemctl
+    # (masalan test-e local rooye Windows/Mac) faghat field-haye mojood barmigardand.
+    st = {"time": int(time.time()), "mock": MOCK,
+          "hub_uptime": int(time.time() - _HUB_START),
+          "python": "%d.%d.%d" % sys.version_info[:3]}
+    try:
+        with open("/proc/uptime") as f:
+            st["uptime"] = int(float(f.read().split()[0]))
+    except Exception:
+        pass
+    try:
+        st["load"] = [round(x, 2) for x in os.getloadavg()]
+    except Exception:
+        pass
+    try:
+        mi = {}
+        with open("/proc/meminfo") as f:
+            for ln in f:
+                if ":" in ln:
+                    k, v = ln.split(":", 1)
+                    mi[k.strip()] = int(v.strip().split()[0])
+        if mi.get("MemTotal"):
+            st["mem_total_kb"] = mi["MemTotal"]
+            st["mem_avail_kb"] = mi.get("MemAvailable", 0)
+    except Exception:
+        pass
+    try:
+        du = shutil.disk_usage("/")
+        st["disk_total"] = du.total
+        st["disk_free"] = du.free
+    except Exception:
+        pass
+    svcs = {}
+    if shutil.which("systemctl"):
+        for u in ("ratholehub", "nginx"):
+            try:
+                r = subprocess.run(["systemctl", "is-active", u],
+                                   capture_output=True, text=True, timeout=5)
+                svcs[u] = (r.stdout or "").strip() or "unknown"
+            except Exception:
+                svcs[u] = "unknown"
+    st["services"] = svcs
+    return st
+
 # ---------- aatbarsnji vrvdi (zd tzrigh) ----------
 # nokte: anchor ba \Z (na $) chvn dar Python `$` yek newline-e entehai ra ham
 # ghabool mikonad (masalan "trk01\n") — ke mitavanad be command-e SSH/audit tzrigh shavad.
@@ -874,6 +922,8 @@ class Handler(BaseHTTPRequestHandler):
             return self._send(401, {"error": "unauthorized"})
         if p == "/api/servers":
             return self._send(200, get_inventory())
+        if p == "/api/hubstatus":
+            return self._send(200, hub_status())
         if p == "/api/config":
             return self._config_view()
         if p == "/api/audit":
@@ -1424,6 +1474,11 @@ const DICT={
   g_users:'karbaran',g_iran_col:'serverhaye Iran',g_node_col:'nodehaye kharej',
   g_legend:'rahnama',g_loading:'dar hal sakhtan naghshe…',g_empty:'serveri baraye namayesh nist.',
   g_external:'server-e kharej az panel',g_hint:'rooye har box ya label click kon ta safhe-ye server baz shavad.',
+  g_drag:'boxha ra mitavani bala/paeen bekeshi — tartib zakhire mishavad.',g_reset:'reset chinesh',
+  view_graph:'graph',view_table:'jadval',
+  c_tunnel:'tunnel',c_status:'vaziat',c_upstream:'upstream',c_iran:'server Iran',c_node:'node',
+  tun_up:'tunnel vasl',tun_down:'tunnel ghat',
+  hub_box:'server-e hub',hs_up:'uptime',hs_load:'load',hs_mem:'RAM',hs_disk:'disk azad',
   nd_up:'faal',nd_down:'ghat',e_bad:'edge ghermez = node vasl nist (doctor)',
  },
  en:{
@@ -1493,6 +1548,11 @@ const DICT={
   g_users:'Users',g_iran_col:'Iran servers',g_node_col:'Foreign nodes',
   g_legend:'Legend',g_loading:'Building map…',g_empty:'Nothing to draw yet.',
   g_external:'Server outside this panel',g_hint:'Click any box or label to open that server page.',
+  g_drag:'Drag boxes up/down to reorder — order is saved.',g_reset:'Reset layout',
+  view_graph:'Graph',view_table:'Table',
+  c_tunnel:'Tunnel',c_status:'Status',c_upstream:'Upstream',c_iran:'Iran server',c_node:'Node',
+  tun_up:'tunnel up',tun_down:'tunnel down',
+  hub_box:'Hub server',hs_up:'uptime',hs_load:'load',hs_mem:'RAM',hs_disk:'disk free',
   nd_up:'up',nd_down:'down',e_bad:'red edge = node not connected (doctor)',
  }
 };
@@ -1562,8 +1622,12 @@ async function ensureServers(){if(SERVERS.length)return;const {j}=await api('GET
 async function loadAll(){SERVERS=[];await ensureServers();router();}
 // vaghti overview miresad, faghat safhe-ye faal ra be-rooz kon
 function onOv(n){
- if(ROUTE.page==='dashboard')updateCard(n);
+ if(ROUTE.page==='dashboard'){updateCard(n);
+  // doctor-e iran vaziat-e tunnel-e node-ha ra moshakhas mikonad → kart-e node-ha ham berooz shavand
+  if(fnd(n).role==='iran')SERVERS.filter(s=>s.role==='node').forEach(s=>updateCard(s.name));
+  updateHubStrip();}
  else if(ROUTE.page==='server'&&ROUTE.param===n)renderServerPage(n);
+ else if(ROUTE.page==='server'&&fnd(n).role==='iran'&&fnd(ROUTE.param).role==='node')renderServerPage(ROUTE.param);
  else if(ROUTE.page==='routing')scheduleGraph();
 }
 async function loadOv(n){const {j}=await api('GET','api/servers/'+n+'/overview');OVS[n]=j||{};onOv(n);}
@@ -1595,14 +1659,31 @@ function refreshPage(){SERVERS=[];ensureServers().then(()=>{router();pollByPage(
 // polling-e hoshmand: faghat overview-haye lazem baraye safhe-ye faal
 function pollByPage(){
  if(!TOKEN)return;
- if(ROUTE.page==='server'&&ROUTE.param){loadOv(ROUTE.param);}
+ if(ROUTE.page==='server'&&ROUTE.param){loadOv(ROUTE.param);
+  // vaziat-e tunnel-e node az doctor-e Iran miayad → overview-e Iran-ha ham lazem ast
+  if(fnd(ROUTE.param).role==='node')SERVERS.filter(s=>s.role==='iran').forEach(s=>loadOv(s.name));}
  else if(ROUTE.page==='dashboard'||ROUTE.page==='routing'){SERVERS.forEach(s=>loadOv(s.name));}
+ if(ROUTE.page==='dashboard')loadHubStatus();
 }
 async function doLogin(){const {status,j}=await api('POST','api/login',{password:$('pw').value});
  if(status===200){TOKEN=j.token;localStorage.setItem('rh_token',TOKEN);if(!location.hash)location.hash='#/dashboard';shell();}else{$('msg').textContent=t('pw_wrong');}}
 function fnd(n){return SERVERS.find(s=>s.name===n)||{};}
 function setDot(n,cls){const d=$('dot_'+n); if(d)d.className='dot '+cls;}
 
+// ---------- vaziat-e vasl boodan-e tunnel-e node (az doctor-e serverhaye Iran) ----------
+// doctor rooye Iran har node ra ok/warn mikonad; inja natije baraye yek server-e node
+// jam mishavad: 'ok' (hameye service-ha vasl), 'warn' (hadaghal yeki ghat), ya null (namalum).
+function nodeTunnelStatus(n){
+ const ov=OVS[n]; if(!ov||ov.reachable===false)return null;
+ const keys=[n].concat((ov.services||[]).map(x=>x.name));
+ (ov.upstreams||[]).forEach(u=>(u.services||[]).forEach(x=>keys.push(x.name)));
+ let seen=false,bad=false;
+ SERVERS.filter(s=>s.role==='iran').forEach(s=>{
+  const hn=(((OVS[s.name]||{}).health)||{}).nodes||{};
+  keys.forEach(k=>{if(k in hn){seen=true;if(hn[k]==='warn')bad=true;}});
+ });
+ return seen?(bad?'warn':'ok'):null;
+}
 // ---------- badge-haye khoolase (moshtarak beyne kart va safhe-ye server) ----------
 function headBadges(n,ov){
  const role=fnd(n).role;
@@ -1615,6 +1696,8 @@ function headBadges(n,ov){
  }else{const m=ov.main_tunnel||(ov.kcp||{}).mode||'ws';
   hb=m==='noise'?`<span class="badge b-noise">tunnel noise</span>`:(m==='kcp'?`<span class="badge b-kcp">tunnel kcp ${h((ov.kcp||{}).profile||'')}</span>`:(m==='plain'?`<span class="badge b-plain">tunnel plain</span>`:'<span class="badge b-ws">tunnel ws/443</span>'));
   if((ov.noise||{}).enabled&&m!=='noise'){hb+=' <span class="badge b-noise">noise</span>';}
+  const ts=nodeTunnelStatus(n);
+  if(ts)hb+=` <span class="badge ${ts==='ok'?'b-ok':'b-bad'}">${ts==='ok'?t('tun_up'):t('tun_down')}</span>`;
  }
  return hb;
 }
@@ -1622,7 +1705,36 @@ function ovDotCls(n,ov){
  if(!ov)return 'd-un';
  if(ov.reachable===false)return 'd-bad';
  if(fnd(n).role==='iran')return ((ov.health||{}).fail===0)?'d-ok':'d-bad';
- return 'd-ok';
+ const ts=nodeTunnelStatus(n);
+ return ts==='warn'?'d-bad':'d-ok';
+}
+
+// ---------- vaziat-e khod-e server-e hub (strip-e bala-ye dashboard) ----------
+let HUBST=null;
+function fmtDur(s){if(s==null)return '?';const d=Math.floor(s/86400),hh=Math.floor(s%86400/3600),mm=Math.floor(s%3600/60);
+ return (d?d+'d ':'')+(hh?hh+'h ':'')+mm+'m';}
+function fmtGB(b){return (b/1073741824).toFixed(1)+'G';}
+async function loadHubStatus(){const {j}=await api('GET','api/hubstatus');HUBST=j||null;updateHubStrip();}
+function updateHubStrip(){
+ const box=$('hubstrip'); if(!box)return;
+ const st=HUBST;
+ if(!st){box.innerHTML=`<span class="sub">${t('loading')}</span>`;return;}
+ let x=`<span class="badge b-role">${t('hub_box')}</span>`;
+ const sv=st.services||{};
+ Object.keys(sv).forEach(u=>{const ok=sv[u]==='active';
+  x+=` <span class="badge ${ok?'b-ok':'b-bad'}">${h(u)} ${ok?'✓':'✗'}</span>`;});
+ if(st.uptime!=null)x+=` <span class="sub mono">${t('hs_up')}: ${fmtDur(st.uptime)}</span>`;
+ else x+=` <span class="sub mono">${t('hs_up')}(hub): ${fmtDur(st.hub_uptime)}</span>`;
+ if(st.load)x+=` <span class="sub mono">${t('hs_load')}: ${st.load.join(' ')}</span>`;
+ if(st.mem_total_kb){const used=st.mem_total_kb-(st.mem_avail_kb||0);
+  x+=` <span class="sub mono">${t('hs_mem')}: ${(used/1048576).toFixed(1)}/${(st.mem_total_kb/1048576).toFixed(1)}G</span>`;}
+ if(st.disk_total)x+=` <span class="sub mono">${t('hs_disk')}: ${fmtGB(st.disk_free)}/${fmtGB(st.disk_total)}</span>`;
+ // khoolase-ye inventory: chand server up/down (az overview-haye cache-shode)
+ let up=0,down=0,unk=0;
+ SERVERS.forEach(s=>{const ov=OVS[s.name];
+  if(!ov)unk++;else if(ov.reachable===false)down++;else up++;});
+ x+=` <span class="badge ${down?'b-bad':'b-ok'}">${up}/${SERVERS.length} SSH</span>`;
+ box.innerHTML=x;
 }
 
 // ---------- safhe: dashboard (grid/list kart-haye khoolase) ----------
@@ -1631,7 +1743,8 @@ function renderDashboard(){
  pg.innerHTML=`<div class="ptitle"><h2>${t('nav_dash')}</h2><span style="flex:1"></span>
    <div class="vswitch"><button id="vg" class="${VIEW==='grid'?'on':''}" onclick="setView('grid')">▦ ${t('view_grid')}</button>
    <button id="vl" class="${VIEW==='list'?'on':''}" onclick="setView('list')">☰ ${t('view_list')}</button></div></div>
-  <div class="card" style="margin-top:0"><div class="cbody">
+  <div class="card" style="margin-top:0"><div class="cbody" id="hubstrip" style="display:flex;flex-wrap:wrap;gap:8px;align-items:center;padding:10px 16px"></div></div>
+  <div class="card"><div class="cbody">
    <div class="addbar"><b>${t('add_server')}:</b>
    <input id="n" placeholder="${t('f_name')}" size="10"><select id="rl"><option value="iran">iran</option><option value="node">node</option></select>
    <input id="hh" placeholder="${t('f_host')}" size="14"><input id="uu" value="root" size="6"><input id="pp" value="22" size="4">
@@ -1641,6 +1754,7 @@ function renderDashboard(){
    <div class="sub" style="margin-top:6px">${t('prov_hint')}</div></div></div>
   <div id="servers" class="grid ${VIEW==='list'?'list':''}"></div>`;
  drawCards();
+ updateHubStrip(); loadHubStatus();
  SERVERS.forEach(s=>{if(OVS[s.name])updateCard(s.name);loadOv(s.name);});
 }
 function setView(v){VIEW=v;localStorage.setItem('rh_view',v);
@@ -1694,6 +1808,8 @@ function renderServerPage(n){
  if(!ov){body=`<div class="empty">${t('loading')}</div>`;loadOv(n);}
  else if(ov.reachable===false){body=`<div class="sec"><div class="empty">${t('ssh_help')}<br><code>ssh-copy-id -i /root/.ssh/id_ed25519.pub root@${h(s.host)}</code><br><br>${h(ov.error||'')}</div></div>`;}
  else{body=(s.role==='iran'?renderIran(n,ov):renderNode(n,ov));}
+ // baraye node: dot-haye vaziat az doctor-e Iran miayand — agar overview-e Iran-i nadarim, biar
+ if(s.role==='node')SERVERS.filter(x=>x.role==='iran'&&!OVS[x.name]).forEach(x=>loadOv(x.name));
  pg.innerHTML=`<div class="spage">${head}<div id="body_${h(n)}">${body}</div></div>`;
 }
 async function delSrvPage(n){if(!confirm(t('cf_delsrv')+' ('+n+')'))return;await api('DELETE','api/servers/'+n);SERVERS=[];delete OVS[n];nav('#/dashboard');}
@@ -1758,6 +1874,20 @@ function renderIran(n,ov){
  return s;
 }
 
+// vaziat-e yek service-e node az doctor-e hameye Iran-ha ('ok'/'warn'/null)
+function svcStatus(name){
+ let st=null;
+ SERVERS.filter(s=>s.role==='iran').forEach(s=>{
+  const hn=(((OVS[s.name]||{}).health)||{}).nodes||{};
+  if(name in hn){if(hn[name]==='warn')st='warn';else if(st===null)st='ok';}
+ });
+ return st;
+}
+function svcDot(name){
+ const st=svcStatus(name);
+ return st?`<span class="dot ${st==='ok'?'d-ok':'d-bad'}" title="${st==='ok'?t('nd_up'):t('nd_down')}" style="margin-inline-end:6px"></span>`:'';
+}
+
 function renderNode(n,ov){
  let s='<div id="det_'+n+'"></div>';
  s+=`<div class="sec"><h4>${t('main_tunnel')} ${esc(ov.main_server||'?')}</h4><div class="btns">
@@ -1780,7 +1910,7 @@ function renderNode(n,ov){
  const sv=ov.services||[];
  if(!sv.length)s+=`<div class="empty">${t('no_svc')}</div>`;
  else{s+=tbl([t('c_svc'),t('c_inbound'),t('c_ops')]);
-  sv.forEach(d=>{s+=`<tr><td>${esc(d.name)}</td><td>${esc(d.inbound)}</td>
+  sv.forEach(d=>{s+=`<tr><td>${svcDot(d.name)}${esc(d.name)}</td><td>${esc(d.inbound)}</td>
    <td class="btns"><button class="r" onclick="rmSvc('${n}','${esc(d.name)}')">${t('remove')}</button></td></tr>`;});
   s+='</table>';}
  s+='</div>';
@@ -1797,7 +1927,7 @@ function renderNode(n,ov){
    <button class="gh" onclick="run('${n}','upstream_kcp_status',{id:'${esc(u.id)}'})">${t('status')}</button>
    <button class="g" onclick="upAddSvc('${n}','${esc(u.id)}')">${t('add_svc')}</button>
    <button class="r" onclick="upRm('${n}','${esc(u.id)}')">${t('del_up')}</button></div>`;
-  if((u.services||[]).length){s+=tbl([t('c_svc'),t('c_inbound'),t('c_ops')]);u.services.forEach(x=>{s+=`<tr><td>${esc(x.name)}</td><td>${esc(x.inbound)}</td>
+  if((u.services||[]).length){s+=tbl([t('c_svc'),t('c_inbound'),t('c_ops')]);u.services.forEach(x=>{s+=`<tr><td>${svcDot(x.name)}${esc(x.name)}</td><td>${esc(x.inbound)}</td>
    <td class="btns"><button class="r" onclick="upRmSvc('${n}','${esc(u.id)}','${esc(x.name)}')">${t('remove')}</button></td></tr>`;});s+='</table>';}
   s+='</div>';
  });
@@ -1806,22 +1936,58 @@ function renderNode(n,ov){
 }
 
 // ---------- safhe: routing (graph-e topology, SVG dasti bedoon lib) ----------
-let _gTimer=null;
-function scheduleGraph(){clearTimeout(_gTimer);_gTimer=setTimeout(()=>{if(ROUTE.page==='routing')drawGraph();},150);}
+let _gTimer=null,_gDragging=false;
+let GVIEW=localStorage.getItem('rh_gview')||'graph';     // namaye routing: graph|table
+function scheduleGraph(){clearTimeout(_gTimer);_gTimer=setTimeout(()=>{if(ROUTE.page==='routing'&&!_gDragging)drawGraph();},150);}
+function setGView(v){GVIEW=v;localStorage.setItem('rh_gview',v);renderRouting();}
+// tartib-e dasti-e box-ha (drag): dar localStorage mimanad
+function gOrder(col){try{return JSON.parse(localStorage.getItem('rh_gorder_'+col)||'[]');}catch(e){return[];}}
+function gResetOrder(){localStorage.removeItem('rh_gorder_iran');localStorage.removeItem('rh_gorder_node');drawGraph();toast(t('saved'));}
+function gApplyOrder(names,col){ // sort-e stable: avval tartib-e save-shode, baghye ba tartib-e ghabli
+ const ord=gOrder(col),idx={};ord.forEach((n,i)=>idx[n]=i);
+ return names.map((n,i)=>({n,i})).sort((a,b)=>{
+  const ia=(a.n in idx)?idx[a.n]:1e9+a.i, ib=(b.n in idx)?idx[b.n]:1e9+b.i; return ia-ib;
+ }).map(x=>x.n);
+}
 function renderRouting(){
  const pg=$('page'); if(!pg)return;
  pg.innerHTML=`<div class="ptitle"><h2>${t('nav_routing')}</h2><span style="flex:1"></span>
+   <div class="vswitch"><button class="${GVIEW==='graph'?'on':''}" onclick="setGView('graph')">◈ ${t('view_graph')}</button>
+   <button class="${GVIEW==='table'?'on':''}" onclick="setGView('table')">☰ ${t('view_table')}</button></div>
+   ${GVIEW==='graph'?`<button class="gh" onclick="gResetOrder()">${t('g_reset')}</button>`:''}
    <button class="gh" onclick="pollByPage()">${t('refresh')}</button></div>
-  <div class="legend"><b style="color:var(--tx)">${t('g_legend')}:</b>
+  ${GVIEW==='graph'?`<div class="legend"><b style="color:var(--tx)">${t('g_legend')}:</b>
    <span class="li"><span class="lw lw-ws"></span> ws/443</span>
    <span class="li"><span class="lw lw-kcp"></span> kcp</span>
    <span class="li"><span class="lw lw-noise"></span> noise</span>
    <span class="li"><span class="lw lw-plain"></span> plain</span>
-   <span class="li"><span class="lw lw-bad"></span> ${t('e_bad')}</span></div>
+   <span class="li"><span class="lw lw-bad"></span> ${t('e_bad')}</span></div>`:''}
   <div class="gwrap" id="gwrap"></div>
-  <div class="sub" style="margin-top:8px">${t('g_hint')}</div>`;
+  <div class="sub" style="margin-top:8px">${GVIEW==='graph'?(t('g_hint')+' '+t('g_drag')):t('g_hint')}</div>`;
  drawGraph();
  SERVERS.forEach(s=>{if(!OVS[s.name])loadOv(s.name);});
+}
+// ---------- namaye jadval: har edge yek radif ----------
+function drawRouteTable(){
+ const w=$('gwrap'); if(!w)return;
+ const M=buildGraphModel();
+ if(!M.edges.length){w.innerHTML=`<div class="empty" style="padding:20px">${t('g_empty')}</div>`;return;}
+ const rows=M.edges.slice().sort((a,b)=>(a.tgt.name+a.node).localeCompare(b.tgt.name+b.node));
+ let x=`<div style="direction:${LANG==='fa'?'rtl':'ltr'};padding:4px 10px">`;
+ x+=tbl([t('c_node'),t('c_upstream'),t('c_iran'),t('c_tunnel'),t('n_svcs'),t('c_status')]);
+ rows.forEach(e=>{
+  const tb=e.tunnel==='kcp'?'b-kcp':(e.tunnel==='noise'?'b-noise':(e.tunnel==='plain'?'b-plain':'b-ws'));
+  const st=e.status==='warn'?`<span class="dot d-bad"></span> ${t('tun_down')}`
+          :(e.status==='ok'?`<span class="dot d-ok"></span> ${t('tun_up')}`:`<span class="dot d-un"></span>`);
+  const tgt=e.tgt.kind==='iran'
+    ?`<a style="color:var(--ac);cursor:pointer" onclick="nav('#/server/${h(e.tgt.name)}')">${h(e.tgt.name)}</a>`
+    :`${h(e.tgt.name)} <span class="sub">(${t('g_external')})</span>`;
+  x+=`<tr><td><a style="color:var(--ac);cursor:pointer" onclick="nav('#/server/${h(e.node)}')">${h(e.node)}</a></td>
+   <td class="mono">${h(e.label||'main')}</td><td>${tgt}</td>
+   <td><span class="badge ${tb}">${h(e.tunnel)}</span></td>
+   <td class="mono">${h(e.svcs.join(', ')||'-')}</td><td>${st}</td></tr>`;});
+ x+='</table></div>';
+ w.innerHTML=x;
 }
 // host-e yek "host:port" ra be name-e server-e iran dar inventory map mikonad
 function matchIran(hostport,idmap){
@@ -1871,6 +2037,7 @@ function buildGraphModel(){
 }
 function drawGraph(){
  const w=$('gwrap'); if(!w)return;
+ if(GVIEW==='table'){drawRouteTable();return;}
  const M=buildGraphModel();
  if(!M.irans.length&&!M.nds.length){w.innerHTML=`<div class="empty" style="padding:20px">${t('g_empty')}</div>`;return;}
  const anyOv=SERVERS.some(s=>OVS[s.name]);
@@ -1878,8 +2045,11 @@ function drawGraph(){
  // sotoon-e node-ha ra bar asas-e iran-e mabda sort kon ta edge-ha kamtar ghat shavand
  const firstIran={};
  M.edges.forEach(e=>{if(!(e.node in firstIran))firstIran[e.node]=(e.tgt.kind==='iran'?e.tgt.name:'zz_'+e.tgt.name);});
- const nodeCol=M.nds.slice().sort((a,b)=>((firstIran[a.name]||'~')+a.name).localeCompare((firstIran[b.name]||'~')+b.name));
- const iranCol=M.irans.map(s=>({name:s.name,host:s.host,ext:false}))
+ let nodeNames=M.nds.slice().sort((a,b)=>((firstIran[a.name]||'~')+a.name).localeCompare((firstIran[b.name]||'~')+b.name)).map(s=>s.name);
+ nodeNames=gApplyOrder(nodeNames,'node');                      // tartib-e dasti (drag) oloviat darad
+ const nodeCol=nodeNames.map(nm=>M.nds.find(s=>s.name===nm)).filter(Boolean);
+ const iranNames=gApplyOrder(M.irans.map(s=>s.name),'iran');
+ const iranCol=iranNames.map(nm=>{const s=M.irans.find(x=>x.name===nm);return{name:s.name,host:s.host,ext:false};})
    .concat(M.externals.map(hst=>({name:hst,host:'',ext:true})));
  // mokhtasat-e amoodi
  function place(list,x,hh){let y=46;const pos={};list.forEach(it=>{pos[it.name?it.name:it]={x,y,h:hh};y+=hh+GY;});return{pos,bot:y};}
@@ -1929,7 +2099,8 @@ function drawGraph(){
   const p=pi.pos[it.name],hh=P=>p.y+P;
   const ov=OVS[it.name],off=!it.ext&&ov&&ov.reachable===false;
   const click=it.ext?'':` onclick="nav('#/server/${h(it.name)}')"`;
-  sv+=`<g${click}><rect class="gbox gbox-iran${it.ext?' gbox-ext':''}${off?' gbox-off':''}" x="${p.x}" y="${p.y}" width="${BW}" height="${p.h}" rx="10"><title>${h(it.ext?t('g_external'):it.name)}</title></rect>`;
+  const drag=it.ext?'':` data-gcol="iran" data-gname="${h(it.name)}"`;
+  sv+=`<g${click}${drag}><rect class="gbox gbox-iran${it.ext?' gbox-ext':''}${off?' gbox-off':''}" x="${p.x}" y="${p.y}" width="${BW}" height="${p.h}" rx="10"><title>${h(it.ext?t('g_external'):it.name)}</title></rect>`;
   const dcls=it.ext?'#8ba0b6':(off?'var(--rd)':(ov?(((ov.health||{}).fail===0)?'var(--gr)':'var(--rd)'):'var(--yl)'));
   sv+=`<circle cx="${p.x+16}" cy="${hh(20)}" r="4.5" fill="${dcls}"/>`;
   sv+=`<text x="${p.x+28}" y="${hh(24)}" class="gtxt">${h(it.name.length>20?it.name.slice(0,19)+'…':it.name)}</text>`;
@@ -1945,7 +2116,7 @@ function drawGraph(){
   const p=pn.pos[d.name];const ov=OVS[d.name];const off=ov&&ov.reachable===false;
   const bad=M.edges.some(e=>e.node===d.name&&e.status==='warn');
   const dcls=off||bad?'var(--rd)':(ov?'var(--gr)':'var(--yl)');
-  sv+=`<g onclick="nav('#/server/${h(d.name)}')"><rect class="gbox${off?' gbox-off':''}" x="${p.x}" y="${p.y}" width="${BW}" height="${p.h}" rx="10"><title>${h(d.name)}</title></rect>`;
+  sv+=`<g onclick="nav('#/server/${h(d.name)}')" data-gcol="node" data-gname="${h(d.name)}"><rect class="gbox${off?' gbox-off':''}" x="${p.x}" y="${p.y}" width="${BW}" height="${p.h}" rx="10"><title>${h(d.name)}</title></rect>`;
   sv+=`<circle cx="${p.x+16}" cy="${p.y+20}" r="4.5" fill="${dcls}"/>`;
   sv+=`<text x="${p.x+28}" y="${p.y+24}" class="gtxt">${h(d.name.length>20?d.name.slice(0,19)+'…':d.name)}</text>`;
   const sub=(d.host||'')+(ov&&ov.services?(' · '+ov.services.length+' '+t('n_svcs')):'');
@@ -1955,6 +2126,39 @@ function drawGraph(){
  sv+='</svg>';
  if(!anyOv)sv=`<div class="empty" style="padding:12px 16px 0">${t('g_loading')}</div>`+sv;
  w.innerHTML=sv;
+ bindGraphDrag(w);
+}
+// ---------- drag-e amoodi-e box-ha (tartib dar localStorage) ----------
+function bindGraphDrag(w){
+ const svg=w.querySelector('svg'); if(!svg)return;
+ svg.querySelectorAll('g[data-gname]').forEach(g=>{
+  g.style.cursor='grab';
+  g.addEventListener('pointerdown',ev=>{
+   const col=g.dataset.gcol,name=g.dataset.gname;
+   const vb=svg.viewBox.baseVal,scale=vb.height/svg.getBoundingClientRect().height;
+   let moved=false;const y0=ev.clientY;
+   const mv=e=>{const dy=(e.clientY-y0)*scale;
+    if(!moved&&Math.abs(dy)>6){moved=true;_gDragging=true;g.style.cursor='grabbing';svg.style.userSelect='none';}
+    if(moved)g.setAttribute('transform','translate(0,'+dy+')');};
+   const up=e=>{
+    document.removeEventListener('pointermove',mv);document.removeEventListener('pointerup',up);
+    svg.style.userSelect='';_gDragging=false;
+    if(!moved)return;                      // click-e sade → navigation-e aadi
+    // click-e badi (ke browser bad az pointerup mifrestad) navigation nakonad
+    g.addEventListener('click',ce=>{ce.stopPropagation();ce.preventDefault();},{capture:true,once:true});
+    // tartib-e jadid: markaz-e box-e keshide-shode ra beyn-e baghye peyda kon
+    const others=[...svg.querySelectorAll('g[data-gcol="'+col+'"]')].filter(x=>x!==g);
+    const cy=el=>{const r=el.querySelector('rect');return parseFloat(r.getAttribute('y'))+parseFloat(r.getAttribute('height'))/2;};
+    const myY=cy(g)+(e.clientY-y0)*scale;
+    const order=others.map(x=>({n:x.dataset.gname,y:cy(x)}));
+    order.push({n:name,y:myY});
+    order.sort((a,b)=>a.y-b.y);
+    localStorage.setItem('rh_gorder_'+col,JSON.stringify(order.map(x=>x.n)));
+    drawGraph();
+   };
+   document.addEventListener('pointermove',mv);document.addEventListener('pointerup',up);
+  });
+ });
 }
 
 // ---------- safhe: audit / settings (ghablan modal boodand) ----------
