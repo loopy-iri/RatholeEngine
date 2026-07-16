@@ -156,6 +156,29 @@ def read_audit(limit=100):
 # ---------- vaziat-e khod-e server-e hub (uptime/load/mem/disk/serviceha) ----------
 _HUB_START = time.time()
 
+# noskhe-i ke hub «akharin» midanad: az MANAGER_VERSION-e common.sh (bundle ke deploy mishavad)
+# khande mishavad ta ba noskhe-ye nasb-shode rooye har server moghayese shavad. fallback: rشته-ye sabet.
+HUB_FALLBACK_VERSION = "1.4.7"
+def hub_manager_version():
+    cands = []
+    try:
+        cands.append(os.path.join(get_config().get("bundle_dir", ""), "rathole-manager", "common.sh"))
+        cands.append(os.path.join(get_config().get("bundle_dir", ""), "common.sh"))
+    except Exception:
+        pass
+    cands += ["/opt/ratholehub/bundle/rathole-manager/common.sh",
+              "/usr/local/bin/common.sh", "/etc/rathole-manager/common.sh"]
+    for p in cands:
+        try:
+            if p and os.path.isfile(p):
+                with open(p, encoding="utf-8", errors="ignore") as f:
+                    m = re.search(r'^\s*MANAGER_VERSION="?([^"\s]+)"?', f.read(), re.M)
+                    if m:
+                        return m.group(1)
+        except Exception:
+            continue
+    return HUB_FALLBACK_VERSION
+
 def hub_status():
     # hame-ye bakhsh-ha best-effort hastand; rooye system-haye bedoon /proc ya systemctl
     # (masalan test-e local rooye Windows/Mac) faghat field-haye mojood barmigardand.
@@ -199,6 +222,7 @@ def hub_status():
             except Exception:
                 svcs[u] = "unknown"
     st["services"] = svcs
+    st["latest_version"] = hub_manager_version()
     return st
 
 # ---------- aatbarsnji vrvdi (zd tzrigh) ----------
@@ -240,6 +264,7 @@ def build_iran_cmd(action, a):
     if action == "restart":        return ["ratholectl", "restart"]
     if action == "status":         return ["ratholectl", "status", "--json"]
     if action == "paths":          return ["ratholectl", "paths"]
+    if action == "version":        return ["ratholectl", "version"]
     # ---- damnh / gvahi TLS ----
     if action == "tls_info":   return ["ratholectl", "info"]
     if action == "tls_certs":  return ["ratholectl", "certs"]
@@ -464,6 +489,8 @@ def build_node_cmd(action, a):
         return ["ratholenode", "upstream", "restart", uid]
     if action == "restart":
         return ["ratholenode", "restart"]
+    if action == "version":
+        return ["ratholenode", "version"]
     if action == "set_server":
         # tunnel-e asli (main) ra be yek server Iran vasl mikonad: host ya host:port
         server = a.get("server", "")
@@ -712,6 +739,10 @@ def mock_run(server, cmd_args):
             "curl -fsSL https://raw.githubusercontent.com/loopy-iri/RatholeEngine/main/install.sh | sudo bash -s -- --node -- \\\n"
             "  --server rp01.l1t.ir:443 --name %s --token a0370655deadbeefcafe1234 --inbound-port 8444\n"
             "────────────────────────────────────────" % nm, "err": ""}
+    if j == "ratholectl version":
+        return {"rc": 0, "out": "manager_version=1.4.7\nrole=panel\nrathole_version=0.5.0", "err": ""}
+    if j == "ratholenode version":
+        return {"rc": 0, "out": "manager_version=1.4.6\nrole=node\nrathole_version=0.5.0", "err": ""}
     if j == "ratholectl status --json":
         return {"rc": 0, "out": json.dumps({
             "domain": "rp01.l1t.ir", "public_ip": "5.202.4.40",
@@ -824,6 +855,16 @@ def parse_noise_connect(text):
         if m:
             return {"port": m.group(1), "pubkey": m.group(2), "pattern": m.group(3) or ""}
     return None
+
+def parse_version(text):
+    # khorooji-ye "ratholectl/ratholenode version" (print_version) → manager/rathole version.
+    t = text or ""
+    out = {"manager": "", "rathole": ""}
+    m = re.search(r"manager_version=(\S+)", t)
+    if m: out["manager"] = m.group(1)
+    m = re.search(r"rathole_version=(\S+)", t)
+    if m: out["rathole"] = m.group(1)
+    return out
 
 def parse_node_connect(text):
     # az khorooji "ratholectl show <name>" (print_node_install) name/token/inbound-e vaghei
@@ -1277,6 +1318,7 @@ class Handler(BaseHTTPRequestHandler):
             ov["direct"] = parse_direct_status(R(["ratholectl", "direct", "status"]).get("out", ""))
             ov["game"] = parse_game_ls(R(["ratholectl", "game", "ls"]).get("out", ""))
             ov["health"] = parse_doctor(R(["ratholectl", "doctor"]).get("out", ""))
+            ov["version"] = parse_version(R(["ratholectl", "version"]).get("out", ""))
         else:
             r = R(["ratholenode", "ls"])
             if r.get("rc") not in (0, None):
@@ -1288,6 +1330,7 @@ class Handler(BaseHTTPRequestHandler):
             ups = parse_upstream_ls(R(["ratholenode", "upstream", "ls"]).get("out", ""))
             ov["upstreams"] = ups["upstreams"]
             ov["main_tunnel"] = (ups.get("main") or {}).get("tunnel", ov["kcp"].get("mode", "ws"))
+            ov["version"] = parse_version(R(["ratholenode", "version"]).get("out", ""))
         return self._send(200, ov)
 
     def _details(self, name):
@@ -1451,6 +1494,10 @@ UI_HTML = r"""<!doctype html><html lang="fa" dir="rtl"><head><meta charset="utf-
  .sec{margin-top:12px} .sec h4{margin:0 0 6px;font-size:13px;color:var(--mut);display:flex;gap:8px;align-items:center;flex-wrap:wrap}
  .dot{width:9px;height:9px;border-radius:50%;display:inline-block;flex-shrink:0} .d-ok{background:var(--gr)} .d-bad{background:var(--rd)} .d-un{background:var(--yl)}
  .up{background:var(--bg);border:1px solid var(--line);border-radius:10px;padding:10px;margin:8px 0}
+ .pbar{flex:1;min-width:120px;height:10px;background:var(--bg);border:1px solid var(--line);border-radius:6px;overflow:hidden}
+ .pfill{height:100%;background:var(--gr);transition:width .3s ease}
+ .updrow{display:flex;align-items:center;gap:8px;padding:4px 0;font-size:13px;border-top:1px solid var(--line)}
+ .updrow .us{color:var(--mut)}
  pre{background:#070c12;padding:10px;border-radius:8px;overflow:auto;max-height:220px;white-space:pre-wrap;font-size:12px;margin:8px 0 0;font-family:var(--mono)}
  .toast{position:fixed;bottom:18px;left:18px;max-width:520px;background:#070c12;border:1px solid var(--line);border-radius:10px;padding:12px 14px;font-size:12px;white-space:pre-wrap;display:none;z-index:20;box-shadow:0 8px 30px rgba(0,0,0,.5)}
  .toast.show{display:block}
@@ -1597,6 +1644,8 @@ const DICT={
   main_tunnel:'tunnel asli →',restart_tunnel:'restart tunnel',migrate:'naghshe mohajerat',
   set_main:'tanzim tunnel asli',l_iran_srv:'server Iran',no_iran:'hich server Iran dar hub sabt nashode — aval yeki ezafe kon.',
   wire_to_node:'afzoodan be node',wire_title:'sim-keshi node be maghsad',l_dst_node:'maghsad (node / upstream)',
+  upd_all:'apdit-e hame',cf_upd_all:'hameye serverha yeki-yeki apdit shavand?',upd_wait:'dar saf',upd_running:'dar hal apdit…',
+  upd_ok:'apdit shod',upd_fail:'shekast',upd_done:'apdit tamam shod',ver_ok:'noskhe be-ruz ast',ver_old:'noskhe ghadimi — apdit kon',
   no_node_dst:'hich node-e kharej dardastras nist (aval yek node ezafe/roshan kon).',wire_fail:'gereftan token-e node shekast khord.',
   watchdog:'watchdog (restart khodkar):',wd_on:'roshan',wd_off:'khamoosh',wd_status:'vaziat',
   svc_tunnel:'servicehaye in tunnel',add_svc:'+ service',no_svc:'servisi nist.',c_svc:'service',
@@ -1702,6 +1751,8 @@ const DICT={
   main_tunnel:'Main tunnel →',restart_tunnel:'restart tunnel',migrate:'Migration map',
   set_main:'Set main tunnel',l_iran_srv:'Iran server',no_iran:'No Iran server registered in the hub — add one first.',
   wire_to_node:'Add to node',wire_title:'Wire node to target',l_dst_node:'Target (node / upstream)',
+  upd_all:'Update all',cf_upd_all:'Update all servers one by one?',upd_wait:'queued',upd_running:'updating…',
+  upd_ok:'updated',upd_fail:'failed',upd_done:'update finished',ver_ok:'version up to date',ver_old:'outdated — please update',
   no_node_dst:'No foreign node reachable (add/start one first).',wire_fail:'Failed to fetch node token.',
   watchdog:'watchdog (auto restart):',wd_on:'On',wd_off:'Off',wd_status:'Status',
   svc_tunnel:'Services on this tunnel',add_svc:'+ service',no_svc:'No services.',c_svc:'Service',
@@ -1918,7 +1969,15 @@ function headBadges(n,ov){
   const ts=nodeTunnelStatus(n);
   if(ts)hb+=` <span class="badge ${ts==='ok'?'b-ok':'b-bad'}">${ts==='ok'?t('tun_up'):t('tun_down')}</span>`;
  }
+ hb+=verBadge(ov);
  return hb;
+}
+// badge-e noskhe: sabz=hamsan ba akharin (latest_version-e hub), zard=ghadimi-tar (niaz be apdit).
+function latestVer(){return (HUBST&&HUBST.latest_version)||'';}
+function verBadge(ov){
+ const mv=((ov||{}).version||{}).manager||''; if(!mv)return '';
+ const lv=latestVer(); const old=lv&&mv!==lv;
+ return ` <span class="badge ${old?'b-bad':'b-ok'}" title="${old?t('ver_old'):t('ver_ok')}">v${h(mv)}${old?' → v'+h(lv):''}</span>`;
 }
 function ovDotCls(n,ov){
  if(!ov)return 'd-un';
@@ -1960,8 +2019,10 @@ function updateHubStrip(){
 function renderDashboard(){
  const pg=$('page'); if(!pg)return;
  pg.innerHTML=`<div class="ptitle"><h2>${t('nav_dash')}</h2><span style="flex:1"></span>
+   <button class="g" id="updall" onclick="updateAll()">${t('upd_all')}</button>
    <div class="vswitch"><button id="vg" class="${VIEW==='grid'?'on':''}" onclick="setView('grid')">▦ ${t('view_grid')}</button>
    <button id="vl" class="${VIEW==='list'?'on':''}" onclick="setView('list')">☰ ${t('view_list')}</button></div></div>
+  <div id="updpanel"></div>
   <div class="card" style="margin-top:0"><div class="cbody" id="hubstrip" style="display:flex;flex-wrap:wrap;gap:8px;align-items:center;padding:10px 16px"></div></div>
   <div class="card"><div class="cbody">
    <div class="addbar"><b>${t('add_server')}:</b>
@@ -2527,6 +2588,45 @@ async function run(n,a,args){toast(t('running')+' '+a+' '+t('on')+' '+n+' …');
  else{toast(verdict+(body?(' — '+body):''));}
  loadOv(n);}
 async function doDeploy(n){if(!confirm(t('cf_deploy')+' '+n+' ?'))return; run(n,'deploy');}
+// apdit-e hamegani: hameye serverha ra YEKI-YEKI (tartibi) apdit mikonad va progress bar +
+// vaziat-e har server ra live neshan midahad. deploy = install.sh --update (snapshot+rollback-e khodkar).
+let UPD_BUSY=false;
+async function updateAll(){
+ if(UPD_BUSY)return;
+ const list=SERVERS.slice();
+ if(!list.length){toast(t('no_servers'));return;}
+ if(!confirm(t('cf_upd_all')+' ('+list.length+')'))return;
+ UPD_BUSY=true; const btn=$('updall'); if(btn){btn.disabled=true;}
+ const panel=$('updpanel'); const total=list.length; let done=0, okc=0, failc=0;
+ const rows=list.map(s=>`<div class="updrow" id="ur_${h(s.name)}"><span class="dot d-un"></span><b>${h(s.name)}</b> <span class="badge b-role">${h(s.role)}</span><span class="us" id="us_${h(s.name)}">${t('upd_wait')}</span></div>`).join('');
+ if(panel)panel.innerHTML=`<div class="card"><div class="cbody">
+   <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px"><b>${t('upd_all')}</b>
+     <div class="pbar"><div class="pfill" id="pfill" style="width:0%"></div></div>
+     <span id="pcnt" class="mono">0/${total}</span>
+     <button class="gh" onclick="closeUpdPanel()" id="updclose" disabled>${t('close')}</button></div>
+   ${rows}</div></div>`;
+ for(const s of list){
+  const us=$('us_'+s.name), dot=document.querySelector('#ur_'+CSS.escape(s.name)+' .dot');
+  if(us)us.textContent=' — '+t('upd_running'); if(dot)dot.className='dot d-un';
+  try{
+   const {j}=await api('POST','api/servers/'+s.name+'/action',{action:'deploy',args:{}});
+   const rc=(j&&typeof j.rc==='number')?j.rc:1;
+   if(rc===0){okc++; if(dot)dot.className='dot d-ok';
+     // baad az apdit noskhe-ye jadid ra bekhan
+     await loadOv(s.name); const nv=((OVS[s.name]||{}).version||{}).manager||'?';
+     if(us)us.textContent=' — ✓ '+t('upd_ok')+' (v'+nv+')';
+   }else{failc++; if(dot)dot.className='dot d-bad';
+     if(us)us.textContent=' — ✗ '+t('upd_fail')+' (rc='+rc+')';}
+  }catch(e){failc++; if(dot)dot.className='dot d-bad'; if(us)us.textContent=' — ✗ '+t('upd_fail');}
+  done++; const pct=Math.round(done*100/total);
+  const pf=$('pfill'); if(pf)pf.style.width=pct+'%'; const pc=$('pcnt'); if(pc)pc.textContent=done+'/'+total;
+ }
+ UPD_BUSY=false; if(btn)btn.disabled=false;
+ const cb=$('updclose'); if(cb)cb.disabled=false;
+ toast(t('upd_done')+': ✓'+okc+' ✗'+failc);
+ loadHubStatus();
+}
+function closeUpdPanel(){const p=$('updpanel'); if(p&&!UPD_BUSY)p.innerHTML='';}
 async function showDetails(n){toast(t('loading_det'));
  const {j}=await api('GET','api/servers/'+n+'/details');
  outModal('details · '+n, j.text||JSON.stringify(j));}

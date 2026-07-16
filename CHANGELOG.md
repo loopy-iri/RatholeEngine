@@ -9,6 +9,11 @@ release.yml hamin bakhsh ra be onvan-e title/body-e GitHub Release montasher mik
 
 ## [Unreleased]
 
+## [1.4.7] - 2026-07-16
+
+### Added
+- **hub — dokme-ye «apdit-e hame» + progress bar + namayesh-e noskhe rooye har server:** dar dashboard dokme-ye **«apdit-e hame»** ezafe shod ke hameye serverha (Iran + node) ra **yeki-yeki (tartibi)** az tarigh-e `deploy` (=`install.sh --update` ba snapshot+rollback-e khodkar) apdit mikonad va yek **progress bar** + vaziat-e live-e har server (dar saf / dar hal apdit / ✓ / ✗ + noskhe-ye jadid) neshan midahad. hamchenin: mafhoom-e **noskhe** be system ezafe shod — `MANAGER_VERSION` dar `common.sh` + dstvr-e `version` (ratholectl/ratholenode) ke `manager_version=`/`rathole_version=` chap mikonad؛ hub in ra dar overview-e har server migirad va ba `latest_version` (az `MANAGER_VERSION`-e bundle) moghayese mikonad → badge-e **sabz** (be-ruz) ya **zard** (`vX → vY`, niaz be apdit) rooye kart/safhe-ye har server.
+
 ## [1.4.6] - 2026-07-16
 
 ### Added

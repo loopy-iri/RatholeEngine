@@ -1,6 +1,10 @@
 # common.sh — tavabe eshteraki beyn ratholectl, ratholenode va nsabha
 # in file tvst source frakhvani mishvd; be tnhaii ejra nemishavad.
 
+# noskhe-ye rathole-manager (panel/node/hub). moqe-e release in adad ba tag hamahang mishavad.
+# package.sh/CI mitavanad in ra be tag-e vaghei stamp konad; agar dast taghir dadi، bedoon 'v' bezar.
+MANAGER_VERSION="1.4.7"
+
 c_g(){ printf '\033[1;32m%s\033[0m' "$*"; }
 c_r(){ printf '\033[1;31m%s\033[0m' "$*"; }
 c_y(){ printf '\033[1;33m%s\033[0m' "$*"; }
@@ -10,6 +14,17 @@ err(){ printf '%s %s\n' "$(c_r '[!]')" "$*" >&2; }
 die(){ err "$*"; exit 1; }
 ask_yn(){ local p="$1" a; read -rp "$p [y/N]: " a; [[ "$a" =~ ^[Yy]$ ]]; }
 need_root(){ [ "$(id -u)" -eq 0 ] || die "bayad ba root ejra shavad (sudo)."; }
+
+# chap-e noskhe — ham baraye ensan ham machine-parseable (hub 'manager_version=' ra migirad).
+# $1=role (panel|node|hub) faghat baraye namayesh; rathole-version az binari khande mishavad.
+print_version(){
+  local role="${1:-?}" rv
+  rv="$(rathole --version 2>/dev/null | head -n1 | awk '{print $NF}')"
+  [ -n "$rv" ] || rv="-"
+  echo "manager_version=${MANAGER_VERSION}"
+  echo "role=${role}"
+  echo "rathole_version=${rv}"
+}
 
 # profile FEC → "datashard parityshard mode sndwnd rcvwnd"
 kcp_profile(){

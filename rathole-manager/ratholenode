@@ -1016,6 +1016,7 @@ ratholenode — mdirit klaint rathole (chnd service rooye yek tunnel)
   backup [file] | restore <file>   backup/restore tanzimat node
   update                         beroozresani-e kamel az GitHub (akharin Release; snapshot + rollback-e khodkar)
   show                           namayesh tanzimat (tokenha makhfi)
+  version                        chap-e noskhe-ye manager + rathole
 U
 }
 
@@ -1042,6 +1043,7 @@ case "${1:-show}" in
   status)  cmd_status ;;
   update)  cmd_update ;;
   logs)    shift; cmd_logs "${1:-50}" ;;
+  version|--version|-V) print_version node ;;
   -h|--help|help) usage ;;
   *) err "dstvr nashenakhte: $1"; usage; exit 1 ;;
 esac

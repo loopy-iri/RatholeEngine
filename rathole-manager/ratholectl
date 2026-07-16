@@ -2162,6 +2162,7 @@ dstvrha:
   restart                      restart kamel rathole-server (tunnelha lhzhai ghat)
   enable                       faalsazi va start rathole-server
   update                       beroozresani-e kamel az GitHub (akharin Release; snapshot + rollback-e khodkar)
+  version                      chap-e noskhe-ye manager + rathole
   menu                         mnvi taamoli (pishfarz)
 USAGE
 }
@@ -2213,6 +2214,7 @@ main(){
     restart) need_root; systemctl restart "$RATHOLE_SVC" && log "$RATHOLE_SVC restart shod (hame tunnelha lhzhai ghat shdnd)." ;;
     enable) need_root; systemctl enable --now "$RATHOLE_SVC"; log "$RATHOLE_SVC faal shod." ;;
     update) cmd_update ;;
+    version|--version|-V) print_version panel ;;
     menu)   menu ;;
     -h|--help|help) usage ;;
     *) err "dstvr nashenakhte: $cmd"; usage; exit 1 ;;
