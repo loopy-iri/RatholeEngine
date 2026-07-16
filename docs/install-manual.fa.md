@@ -188,12 +188,19 @@ sudo ratholectl init \
 sudo nginx -t && sudo systemctl reload nginx
 sudo systemctl enable --now rathole-server
 sudo ratholectl doctor        # بررسی سلامت
+sudo ratholectl status        # داشبورد کامل: دامنه، پورت‌ها، گواهی، سرویس‌ها، نودها
+sudo ratholectl paths         # مسیر همه‌ی فایل‌ها با ✓/✗ (وقتی مرحله‌ای گیر کرده مفید است)
+sudo ratholectl version       # manager_version + rathole_version
 ```
+
+> `ratholectl status --json` همان خروجی machine-readable است که دکمه‌ی **وضعیت (Status)** هاب مصرف می‌کند.
 
 > **آپدیت‌های بعدی:** `sudo ratholectl update` آخرین Release گیت‌هاب را می‌گیرد و آپدیت
 > کامل (snapshot + health-check + rollback خودکار) را اجرا می‌کند. روی نود هم
 > `sudo ratholenode update`. هر دو از mirrorهای ghproxy fallback دارند، پس از داخل
-> ایران کار می‌کنند. دکمه‌ی **آپدیت** هاب هم همین را از راه SSH انجام می‌دهد.
+> ایران کار می‌کنند. دکمه‌ی **آپدیت** هاب هم همین را از راه SSH انجام می‌دهد، و دکمه‌ی
+> **آپدیت همه**‌ی آن این کار را روی همه‌ی سرورها یکی‌یکی اجرا می‌کند (progress bar +
+> badge نسخه‌ی سبز/زرد روی هر سرور).
 
 ### ۲.۸ افزودن نود
 
@@ -209,6 +216,8 @@ sudo ratholectl add trk01 2087 --api-port 62050
 sudo ratholectl ls                 # لیست نودها + مسیرهای کاربر
 sudo ratholectl show trk01         # دستور دقیق نصب همان نود را چاپ می‌کند
 ```
+
+`add` (و `show`) یک دستور آماده‌ی `curl -fsSL …/install.sh | sudo bash -s -- --node -- --server <panel>:443 --name … --token … --inbound-port …` هم چاپ می‌کنند (با token/inbound پرشده از state) — همان را مستقیم روی نود خارج کپی کن.
 
 خروجی `show` دقیقاً چیزی است که باید روی نود خارج بزنی — برو بخش [۴](#۴-نود-خارج--نصب-دستی).
 
@@ -435,6 +444,8 @@ curl -s -H "Authorization: Bearer $TOKEN" -X POST $B/api/servers/rp01/action \
 ```
 
 جزئیات کامل action های مجاز و مدل امنیتی: [`docs/hub.md`](hub.md).
+
+> **دکمه‌های مفید هاب:** هر سرور ایران یک دکمه‌ی **وضعیت (Status)** دارد (خروجی `ratholectl status --json` را به‌شکل داشبورد render می‌کند) و داشبورد یک دکمه‌ی **آپدیت همه** دارد (همه‌ی سرورها را یکی‌یکی با progress bar + badge نسخه آپدیت می‌کند). در جدول نودهای هر سرور، **افزودن به نود** یک نود ایران (name/token/inbound) را روی نود/آپ‌استریم خارج به‌عنوان سرویس سیم‌کشی می‌کند، و در صفحه‌ی هر نود **تنظیم تونل اصلی** آن را به سرور ایرانش وصل می‌کند.
 
 ---
 

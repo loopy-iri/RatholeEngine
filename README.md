@@ -97,8 +97,15 @@ Then add nodes from the Iran panel:
 ```bash
 ratholectl add trk01 2087            # → path /trk01 routed to that node
 ratholectl ls                        # list nodes + user paths
+ratholectl status                    # full dashboard: domain, ports, cert, services, nodes (--json for the hub)
+ratholectl paths                     # every config/file path with a ✓/✗
+ratholectl version                   # manager_version + rathole_version
 ratholectl doctor                    # health check
 ```
+
+`ratholectl add` also prints a ready-to-paste `curl … | sudo bash -s -- --node -- …` one-liner for the foreign node, with the token/inbound already filled in.
+
+**From the hub** you can drive all of this without the CLI: **Update all** rolls the update across every server one-by-one (progress bar + per-server status, with a green/yellow version badge on each), **add to node** wires an Iran node (name/token/inbound) onto a foreign node or upstream, and **set main tunnel** links a node to its Iran server.
 
 ## Update & rollback
 
@@ -171,6 +178,10 @@ docs/                     documentation + assets/ (SVG/PNG diagrams)
 **سه نقش:** پنل ایران (`ratholectl` — rathole server + nginx)، نود خارج (`ratholenode` — rathole client)، و هاب مرکزی (`hub.py` — پنل وب مدیریت چند سرور از طریق SSH).
 
 **اصل مرکزی:** تغییر state → بازتولید کانفیگ → `nginx -t` → hot-reload (با حفظ inode و بازگشت خودکار در صورت خطا).
+
+**دستورهای مفید CLI:** `ratholectl status` (داشبورد کامل: دامنه، پورت‌ها، گواهی، سرویس‌ها، نودها — با `--json` برای هاب)، `ratholectl paths` (مسیر همه‌ی فایل‌ها با ✓/✗)، `ratholectl version` (نسخه‌ی مدیر + rathole). `ratholectl add` یک دستور آماده‌ی `curl … | sudo bash -s -- --node -- …` هم برای نصب نود چاپ می‌کند.
+
+**از هاب:** دکمه‌ی **«آپدیت همه»** همه‌ی سرورها را یکی‌یکی آپدیت می‌کند (progress bar + وضعیت هر سرور + badge نسخه سبز/زرد)، **«افزودن به نود»** یک نود ایران را روی نود/آپ‌استریم خارج سیم‌کشی می‌کند، و **«تنظیم تونل اصلی»** نود را به سرور ایرانش وصل می‌کند.
 
 **شروع سریع و مرجع کامل CLI (فارسی):** [`docs/README.fa.md`](docs/README.fa.md)
 

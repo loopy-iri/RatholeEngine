@@ -186,12 +186,19 @@ Optional `init` flags (the defaults are usually right):
 sudo nginx -t && sudo systemctl reload nginx
 sudo systemctl enable --now rathole-server
 sudo ratholectl doctor        # health check
+sudo ratholectl status        # full dashboard: domain, ports, cert, services, nodes
+sudo ratholectl paths         # every config/file path with a ✓/✗ (handy when a step got stuck)
+sudo ratholectl version       # manager_version + rathole_version
 ```
+
+> `ratholectl status --json` is the machine-readable form the hub's **Status** button consumes.
 
 > **Later updates:** `sudo ratholectl update` pulls the latest GitHub Release and
 > runs the full snapshot + health-check + auto-rollback update. Same for
 > `sudo ratholenode update` on a node. Both fall back through ghproxy mirrors, so
-> they work from inside Iran. The hub's **Update** button does the same over SSH.
+> they work from inside Iran. The hub's **Update** button does the same over SSH,
+> and its **Update all** button rolls it across every server one-by-one (progress
+> bar + a green/yellow version badge per server).
 
 ### 2.8 Add a node
 
@@ -207,6 +214,8 @@ sudo ratholectl add trk01 2087 --api-port 62050
 sudo ratholectl ls                 # list nodes + user paths
 sudo ratholectl show trk01         # prints the exact install command for that node
 ```
+
+`add` (and `show`) also print a ready-to-paste `curl -fsSL …/install.sh | sudo bash -s -- --node -- --server <panel>:443 --name … --token … --inbound-port …` one-liner (with the token/inbound already filled from state) — copy it straight onto the foreign node.
 
 The output of `show` is exactly what you run on the foreign node — go to section [4](#4-foreign-node--manual-install).
 
@@ -433,6 +442,8 @@ curl -s -H "Authorization: Bearer $TOKEN" -X POST $B/api/servers/rp01/action \
 ```
 
 Full allow-listed actions and security model: [`docs/hub.md`](hub.md) (Persian).
+
+> **Handy hub buttons:** each Iran server has a **Status** button (renders `ratholectl status --json` as a dashboard) and the dashboard has an **Update all** button (updates every server one-by-one with a progress bar + per-server version badge). In a server's node table, **add to node** wires an Iran node (name/token/inbound) onto a foreign node/upstream as a service, and on a node's page **set main tunnel** links it to its Iran server.
 
 ---
 
