@@ -705,6 +705,13 @@ def mock_run(server, cmd_args):
                 "--------------------------------------------------------------\n"
                 "trk01          1005     8444         -          https://d/trk01\n"
                 "gamenodetrk    1007     2101         7001       https://d/gamenodetrk", "err": ""}
+    if cmd_args[:2] == ["ratholectl", "show"] and len(cmd_args) >= 3:
+        nm = cmd_args[2]
+        return {"rc": 0, "out":
+            "──────── dstvr nasb rooye node kharej (curl yek-khatti) ────────\n"
+            "curl -fsSL https://raw.githubusercontent.com/loopy-iri/RatholeEngine/main/install.sh | sudo bash -s -- --node -- \\\n"
+            "  --server rp01.l1t.ir:443 --name %s --token a0370655deadbeefcafe1234 --inbound-port 8444\n"
+            "────────────────────────────────────────" % nm, "err": ""}
     if j == "ratholectl status --json":
         return {"rc": 0, "out": json.dumps({
             "domain": "rp01.l1t.ir", "public_ip": "5.202.4.40",
@@ -817,6 +824,23 @@ def parse_noise_connect(text):
         if m:
             return {"port": m.group(1), "pubkey": m.group(2), "pattern": m.group(3) or ""}
     return None
+
+def parse_node_connect(text):
+    # az khorooji "ratholectl show <name>" (print_node_install) name/token/inbound-e vaghei
+    # ra darmiavarad — token dar 'ls' mask ast, pas az inja migirim.
+    t = text or ""
+    out = {}
+    m = re.search(r"--name\s+([A-Za-z0-9_-]{1,40})", t)
+    if m: out["name"] = m.group(1)
+    m = re.search(r"--token\s+([A-Za-z0-9._=+/-]{6,255})", t)
+    if m: out["token"] = m.group(1)
+    m = re.search(r"--inbound-port\s+(\d{1,5})", t)
+    if m: out["inbound"] = m.group(1)
+    m = re.search(r"--api-token\s+([A-Za-z0-9._=+/-]{6,255})", t)
+    if m: out["api_token"] = m.group(1)
+    m = re.search(r"--api-inbound-port\s+(\d{1,5})", t)
+    if m: out["api_inbound"] = m.group(1)
+    return out if (out.get("token") and out.get("inbound") and out.get("name")) else None
 
 def parse_noise_status(text):
     # khorooji-ye "ratholectl/ratholenode noise status" ra parse mikonad → enabled/port/count/nodes/mode.
@@ -1027,6 +1051,9 @@ class Handler(BaseHTTPRequestHandler):
         m = re.match(r"^/api/servers/([A-Za-z0-9_-]+)/noiseconnect$", p)
         if m:
             return self._noiseconnect(m.group(1))
+        m = re.match(r"^/api/servers/([A-Za-z0-9_-]+)/nodeconnect/([A-Za-z0-9_-]+)$", p)
+        if m:
+            return self._nodeconnect(m.group(1), m.group(2))
         return self._send(404, {"error": "not found"})
 
 
@@ -1325,6 +1352,27 @@ class Handler(BaseHTTPRequestHandler):
         return self._send(200, {"ok": True, "remote": remote, "pubkey": info["pubkey"],
                                 "pattern": info.get("pattern", "")})
 
+    def _nodeconnect(self, name, node):
+        # az server Iran, meshkhassat-e yek node (name/token/inbound) ra migirad ta betavan
+        # ba yek dokme rooye node-e kharej (ya upstream-esh) be-onvan service sim-keshi kard.
+        # token dar 'ls' mask ast — pas az 'ratholectl show <node>' migirim.
+        s = self._find(name)
+        if not s:
+            return self._send(404, {"error": "server not found"})
+        if s.get("role") != "iran":
+            return self._send(400, {"error": "nodeconnect fght baraye server iran ast"})
+        if not RE_NAME.match(node):
+            return self._send(400, {"error": "name-e node namotabar"})
+        show = run_on_server(s, ["ratholectl", "show", node])
+        info = parse_node_connect(show.get("out", ""))
+        if not info:
+            return self._send(200, {"ok": False, "error": "node peida nashod ya token/inbound darnayamad",
+                                    "raw": show.get("out", "") + show.get("err", "")})
+        return self._send(200, {"ok": True, "name": info["name"], "token": info["token"],
+                                "inbound": info["inbound"],
+                                "api_token": info.get("api_token", ""),
+                                "api_inbound": info.get("api_inbound", "")})
+
 
     def _discover(self, name):
         s = self._find(name)
@@ -1548,6 +1596,8 @@ const DICT={
   c_data:'dade',c_node_inb:'inbound node',
   main_tunnel:'tunnel asli →',restart_tunnel:'restart tunnel',migrate:'naghshe mohajerat',
   set_main:'tanzim tunnel asli',l_iran_srv:'server Iran',no_iran:'hich server Iran dar hub sabt nashode — aval yeki ezafe kon.',
+  wire_to_node:'afzoodan be node',wire_title:'sim-keshi node be maghsad',l_dst_node:'maghsad (node / upstream)',
+  no_node_dst:'hich node-e kharej dardastras nist (aval yek node ezafe/roshan kon).',wire_fail:'gereftan token-e node shekast khord.',
   watchdog:'watchdog (restart khodkar):',wd_on:'roshan',wd_off:'khamoosh',wd_status:'vaziat',
   svc_tunnel:'servicehaye in tunnel',add_svc:'+ service',no_svc:'servisi nist.',c_svc:'service',
   upstreams:'serverhaye Iran-e digar (upstream)',add_up:'+ upstream',no_up:'upstream nadari (faghat yek Iran).',status:'status',del_up:'hazf upstream',cf_delup:'hazf upstream',cf_delupsvc:'hazf service az upstream',
@@ -1651,6 +1701,8 @@ const DICT={
   c_data:'Data',c_node_inb:'Node inbound',
   main_tunnel:'Main tunnel →',restart_tunnel:'restart tunnel',migrate:'Migration map',
   set_main:'Set main tunnel',l_iran_srv:'Iran server',no_iran:'No Iran server registered in the hub — add one first.',
+  wire_to_node:'Add to node',wire_title:'Wire node to target',l_dst_node:'Target (node / upstream)',
+  no_node_dst:'No foreign node reachable (add/start one first).',wire_fail:'Failed to fetch node token.',
   watchdog:'watchdog (auto restart):',wd_on:'On',wd_off:'Off',wd_status:'Status',
   svc_tunnel:'Services on this tunnel',add_svc:'+ service',no_svc:'No services.',c_svc:'Service',
   upstreams:'Other Iran servers (upstream)',add_up:'+ upstream',no_up:'No upstream (single Iran).',status:'status',del_up:'Remove upstream',cf_delup:'Remove upstream',cf_delupsvc:'Remove service from upstream',
@@ -1986,6 +2038,9 @@ function tbl(cols){return '<table><tr>'+cols.map(c=>'<th>'+c+'</th>').join('')+'
 function esc(s){return h(s);}
 
 function renderIran(n,ov){
+ // baraye dokme-ye «afzoodan be node»: overview-e node-haye kharej ra pishaz-dast biar
+ // ta list-e maghsad (node/upstream) khali nabashad.
+ SERVERS.filter(x=>x.role==='node'&&!OVS[x.name]).forEach(x=>loadOv(x.name));
  let s='<div id="det_'+n+'"></div>';
  s+=`<div class="sec"><h4>${t('domain_tls')} <button class="g" onclick="domainTls('${n}')">${t('manage')}</button></h4>
    <div class="empty">${t('domain_hint')}</div></div>`;
@@ -2025,6 +2080,7 @@ function renderIran(n,ov){
                  :`<button class="s" onclick="run('${n}','noise_node_on',{name:'${esc(d.name)}'})">${t('noise_node_on')}</button>`;
    s+=`<tr><td>${hdot}${esc(d.name)}${nbadge}</td><td class="mono">${esc(d.port)}</td><td class="mono">${esc(d.inbound)}</td><td class="mono">${esc(d.api)}</td>
    <td class="btns"><button class="gh" onclick="run('${n}','show_node',{name:'${esc(d.name)}'})">${t('show_token')}</button>
+   <button class="g" onclick="wireNode('${n}','${esc(d.name)}')">${t('wire_to_node')}</button>
    <button class="gh" onclick="editNode('${n}','${esc(d.name)}')">${t('edit')}</button>
    <button class="gh" onclick="renameNode('${n}','${esc(d.name)}')">${t('rename')}</button>
    <button class="gh" onclick="if(confirmT('cf_rotate','${esc(d.name)}'))run('${n}','rotate_node',{name:'${esc(d.name)}'})">${t('rotate')}</button>
@@ -2688,6 +2744,44 @@ function setMainSrv(n){
   const host=(v.iran||'').trim(); if(!host){toast(t('fill'));return;}
   closeModal(); run(n,'set_server',{server:host+':443'});
  });
+}
+// sim-keshi: yek node-e Iran (name/token/inbound) ra rooye yek node-e kharej (ya upstream-esh)
+// be-onvan service ezafe kon. maghsadha: hameye node-ha + upstream-hayeshan; anha ke tunnel-eshan
+// be hamin Iran vasl ast ba ✓ neshan dade va default entekhab mishavand.
+function wireTargets(iranHost){
+ const opts=[]; let def='';
+ SERVERS.filter(s=>s.role==='node').forEach(s=>{
+  const ov=OVS[s.name]; if(!ov||ov.reachable===false)return;
+  const ms=String(ov.main_server||'');
+  const hit=iranHost && (ms===iranHost || ms.split(':')[0]===iranHost);
+  opts.push({v:s.name+'|', t:(hit?'✓ ':'')+s.name+' — main ('+(ms||'?')+')'});
+  if(hit && !def)def=s.name+'|';
+  (ov.upstreams||[]).forEach(u=>{
+   const us=String(u.server||''); const uh=us && (us===iranHost || us.split(':')[0]===iranHost);
+   opts.push({v:s.name+'|'+u.id, t:(uh?'✓ ':'')+s.name+' ▸ upstream '+u.id+' ('+(us||'?')+')'});
+   if(uh && !def)def=s.name+'|'+u.id;
+  });
+ });
+ return {opts, def:def||(opts[0]&&opts[0].v)||''};
+}
+async function wireNode(iranName,nodeName){
+ const s=SERVERS.find(x=>x.name===iranName)||{}; const iranHost=s.host||'';
+ const {opts,def}=wireTargets(iranHost);
+ if(!opts.length){toast(t('no_node_dst'));return;}
+ formModal(t('wire_title')+' · '+nodeName,
+   [{id:'dst',label:t('l_dst_node'),type:'select',val:def,opts}],
+   async v=>{
+    const parts=(v.dst||'').split('|'); const dst=parts[0], up=parts[1]||'';
+    if(!dst){toast(t('fill'));return;}
+    closeModal();
+    toast(t('autofilling'));
+    // 1) token/inbound-e vaghei-ye node-e Iran ra begir (token dar 'ls' mask ast)
+    const {j}=await api('GET','api/servers/'+iranName+'/nodeconnect/'+nodeName);
+    if(!j||!j.ok){toast(t('wire_fail'));outModal(t('wire_title'),(j&&(j.error||j.raw))||'?');return;}
+    // 2) rooye node-e kharej (ya upstream-esh) be-onvan service ezafe kon
+    if(up)run(dst,'upstream_add_svc',{id:up,name:j.name,token:j.token,inbound:j.inbound});
+    else  run(dst,'add_svc',{name:j.name,token:j.token,inbound:j.inbound});
+   });
 }
 // autofill: az server Iran-e entekhab-shode remote/key/profile-e daghigh ra migirad
 async function kcpAutofill(iranName){
