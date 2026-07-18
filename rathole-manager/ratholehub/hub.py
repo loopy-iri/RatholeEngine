@@ -581,6 +581,24 @@ def _ssh_base(cfg, server):
             "%s@%s" % (server.get("ssh_user", "root"), server["host"]), "--"]
     return ssh
 
+def iran_main_server(s):
+    # maghsad-e daghigh-e tunnel-e asli (SERVER=domain:443) ra az yek server-e Iran migirad.
+    # dar halat-e pishfarz (ws+TLS) node bayad be DOMAIN vasl shavad (na host/IP-e SSH), chon
+    # ratholenode az SERVER ham remote_addr va ham SNI ra misazad. domain ra az 'status --json'
+    # migirim; agar darnayamad be host-e inventory fallback mikonim.
+    # bazgasht: (server_str, domain)  — masalan ("rp01.l1t.ir:443", "rp01.l1t.ir")
+    domain = ""
+    try:
+        st = run_on_server(s, ["ratholectl", "status", "--json"])
+        d = json.loads(st.get("out", "") or "{}")
+        domain = str(d.get("domain", "") or "").strip()
+    except (ValueError, TypeError):
+        domain = ""
+    if domain and RE_HOST.match(domain):
+        return "%s:443" % domain, domain
+    host = str(s.get("host", ""))
+    return ("%s:443" % host if host else ""), ""
+
 def deploy_to_server(server):
     # apdit az GitHub: install.sh-e akharin Release ra rooye server migirad (ba mirror-haye
     # ghproxy baraye dor zadan-e filtering) va ba --update ejra mikonad. digar be bundle-e
@@ -661,18 +679,18 @@ def provision_server(d):
     # baraye node: server-e Iran-e main ra moshakhas kon (vorodi iran_server ya, agar
     # faghat yek server Iran dar hub bashad, hamon). in tunnel-e asli (SERVER) ra baad az
     # deploy tanzim mikonad ta node digar «?» nashan nadahad.
-    iran_host = ""
+    iran_host = ""; iran_srv = None
     if role == "node":
         want = str(d.get("iran_server", "")).strip()
         irs = [s for s in get_inventory() if s.get("role") == "iran"]
         if want:
             match = next((s for s in irs if s.get("name") == want or s.get("host") == want), None)
             if match:
-                iran_host = str(match.get("host", ""))
+                iran_host = str(match.get("host", "")); iran_srv = match
             elif RE_HOST.match(want):
                 iran_host = want
         elif len(irs) == 1:
-            iran_host = str(irs[0].get("host", ""))
+            iran_host = str(irs[0].get("host", "")); iran_srv = irs[0]
     if MOCK:
         update_inventory(lambda inv: inv + [server] if not any(s.get("name") == name for s in inv) else inv)
         return {"rc": 0, "out": "[mock provision→%s] kelid nصب shod + deploy + be hub ezafe shod" % name, "err": ""}
@@ -709,10 +727,12 @@ def provision_server(d):
     dep = deploy_to_server(server)
     logs.append("== deploy (github-update) ==\n" + (dep.get("out", "") or "") +
                 (("\n[stderr] " + dep.get("err", "")) if dep.get("err") else ""))
-    # 2.5) baraye node: tunnel-e asli (SERVER) ra be server-e Iran vasl kon ta «?» nashan nadahad
+    # 2.5) baraye node: tunnel-e asli (SERVER) ra be server-e Iran vasl kon ta «?» nashan nadahad.
+    # maghsad = DOMAIN-e omoomi-ye Iran (na host/IP-e SSH) ta SNI ba cert bekhanad va tunnel bala biad.
     if role == "node" and iran_host and dep.get("rc") == 0:
-        sset = run_on_server(server, ["ratholenode", "set", "SERVER", iran_host + ":443"])
-        logs.append("== tunnel-e asli → %s:443 ==\n" % iran_host + (sset.get("out", "") or "") +
+        main_srv = (iran_main_server(iran_srv)[0] if iran_srv else "") or (iran_host + ":443")
+        sset = run_on_server(server, ["ratholenode", "set", "SERVER", main_srv])
+        logs.append("== tunnel-e asli → %s ==\n" % main_srv + (sset.get("out", "") or "") +
                     (("\n[stderr] " + sset.get("err", "")) if sset.get("err") else ""))
     elif role == "node" and not iran_host:
         logs.append("== [هشدار] server Iran-e main tanzim nashod — dar safhe-ye node ba «tanzim tunnel asli» vaslesh kon. ==")
@@ -1095,6 +1115,9 @@ class Handler(BaseHTTPRequestHandler):
         m = re.match(r"^/api/servers/([A-Za-z0-9_-]+)/nodeconnect/([A-Za-z0-9_-]+)$", p)
         if m:
             return self._nodeconnect(m.group(1), m.group(2))
+        m = re.match(r"^/api/servers/([A-Za-z0-9_-]+)/mainconnect$", p)
+        if m:
+            return self._mainconnect(m.group(1))
         return self._send(404, {"error": "not found"})
 
 
@@ -1416,6 +1439,20 @@ class Handler(BaseHTTPRequestHandler):
                                 "api_token": info.get("api_token", ""),
                                 "api_inbound": info.get("api_inbound", "")})
 
+    def _mainconnect(self, name):
+        # az server Iran, MAGHSAD-e daghigh-e tunnel-e asli (SERVER) ra migirad ta hangam-e
+        # «tanzim tunnel asli» rooye node meghdar-e dorost set shavad. dar halat-e pishfarz
+        # (ws+TLS) node bayad be DOMAIN-e omoomi vasl shavad (na host/IP-e SSH-e inventory),
+        # chon ratholenode az SERVER ham remote_addr va ham hostname/SNI ra misazad — agar
+        # SNI ba cert nakhanad, tunnel bala nemiayad. domain ra az 'status --json' migirim.
+        s = self._find(name)
+        if not s:
+            return self._send(404, {"error": "server not found"})
+        if s.get("role") != "iran":
+            return self._send(400, {"error": "mainconnect fght baraye server iran ast"})
+        server, domain = iran_main_server(s)
+        return self._send(200, {"ok": bool(server), "server": server,
+                                "domain": domain, "host": s.get("host", "")})
 
     def _discover(self, name):
         s = self._find(name)
@@ -2834,15 +2871,23 @@ function noiseOnNode(n){formModal(t('t_noise_node'),noiseNodeFields(),
 function iranServers(){return SERVERS.filter(s=>s.role==='iran');}
 // gozine-haye <option> baraye entekhab-e server Iran (host be onvan value)
 function iranSrvOptions(){return iranServers().map(s=>`<option value="${h(s.host)}">${h(s.name)} (${h(s.host)})</option>`).join('');}
-// tunnel-e asli (main) ye node ra be yek server Iran vasl kon (SERVER=host:443)
+// tunnel-e asli (main) ye node ra be yek server Iran vasl kon (SERVER=domain:443)
+// mohem: dar halat-e pishfarz (ws+TLS) node bayad be DOMAIN-e omoomi vasl shavad, na host/IP-e
+// SSH-e inventory — chon ratholenode az SERVER ham remote_addr va ham SNI ra misazad. pas
+// entekhab az roo-ye NAM-e server Iran ast va maghsad-e daghigh (domain) ra az server migirim.
 function setMainSrv(n){
  const irs=iranServers();
  if(!irs.length){toast(t('no_iran'));return;}
- const f=[{id:'iran',label:t('l_iran_srv'),type:'select',val:irs[0].host,
-   opts:irs.map(s=>({v:s.host,t:s.name+' ('+s.host+')'}))}];
- formModal(t('set_main'),f,v=>{
-  const host=(v.iran||'').trim(); if(!host){toast(t('fill'));return;}
-  closeModal(); run(n,'set_server',{server:host+':443'});
+ const f=[{id:'iran',label:t('l_iran_srv'),type:'select',val:irs[0].name,
+   opts:irs.map(s=>({v:s.name,t:s.name+' ('+s.host+')'}))}];
+ formModal(t('set_main'),f,async v=>{
+  const iran=(v.iran||'').trim(); if(!iran){toast(t('fill'));return;}
+  closeModal();
+  toast(t('autofilling'));
+  // domain-e vaghei (ba cert-e mokhtabetesh) ra az server Iran begir, na host-e inventory
+  const {j}=await api('GET','api/servers/'+iran+'/mainconnect');
+  if(!j||!j.ok||!j.server){toast(t('autofail'));return;}
+  run(n,'set_server',{server:j.server});
  });
 }
 // sim-keshi: yek node-e Iran (name/token/inbound) ra rooye yek node-e kharej (ya upstream-esh)

@@ -211,7 +211,7 @@ cmd_ls(){
 }
 
 cmd_set(){
-  need_root; load_env
+  need_root
   local key="${1:-}" val="${2:-}"
   [ -n "$key" ] && [ -n "$val" ] || die "estefade: ratholenode set <SERVER|RATHOLE_VERSION> <value>"
   case "$key" in SERVER|RATHOLE_VERSION) ;; *) die "kelid nashenakhte: $key (baraye serviceha az add-svc/rm-svc estefade kon)";; esac
@@ -221,9 +221,18 @@ cmd_set(){
     SERVER)          echo "$val" | grep -qE '^[A-Za-z0-9_.-]+(:[0-9]{1,5})?$' || die "SERVER namotabar (host ya host:port)." ;;
     RATHOLE_VERSION) echo "$val" | grep -qE '^[A-Za-z0-9_.-]+$' || die "RATHOLE_VERSION namotabar." ;;
   esac
-  if grep -qE "^${key}=" "$ENV_FILE"; then sed -i "s#^${key}=.*#${key}=${val}#" "$ENV_FILE"; else echo "${key}=${val}" >> "$ENV_FILE"; fi
+  # node.env agar hanoz nist (node-e taze az hub provision-shode, ghabl az install-node/curl)
+  # ra bساز — 'set SERVER' khodesh bootstrap-e tunnel-e asli ast, pas nabayad ba «node.env
+  # peyda nashod» die konad. az env_set (ke touch mikonad) estefade mikonim.
+  env_set "$key" "$val"
   log "tanzim shod: $key = $val"
-  cmd_apply
+  # faghat vaghti hadaghal yek service tarif shode apply kon; vagarna SERVER zakhire mishavad
+  # va baad az afzoodan-e avalin service (add-svc / sim-keshi az hub) tunnel sakhte mishavad.
+  if [ -f "$SVC_FILE" ] && grep -qvE '^\s*(#|$)' "$SVC_FILE" 2>/dev/null; then
+    cmd_apply
+  else
+    warn "hanoz service-i nist; $key zakhire shod. baad az 'add-svc' tunnel sakhte mishavad."
+  fi
 }
 
 cmd_show(){
@@ -242,7 +251,7 @@ KCPTUN_BASE_DEF="https://github.com/ossfork/kcptun/releases/download"
 KCP_LOCAL_DEF="127.0.0.1:29900"
 
 env_set(){ # $1=key $2=value (dar node.env)
-  touch "$ENV_FILE"
+  touch "$ENV_FILE"; chmod 600 "$ENV_FILE" 2>/dev/null || true
   if grep -qE "^$1=" "$ENV_FILE"; then sed -i "s#^$1=.*#$1=$2#" "$ENV_FILE"; else echo "$1=$2" >> "$ENV_FILE"; fi
 }
 
