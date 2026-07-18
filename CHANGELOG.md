@@ -9,6 +9,8 @@ release.yml hamin bakhsh ra be onvan-e title/body-e GitHub Release montasher mik
 
 ## [Unreleased]
 
+## [1.4.8] - 2026-07-19
+
 ### Fixed
 - **hub/ratholenode — «tanzim tunnel asli» ba etela'at-e ghalat + khata-ye node.env:** do bug-e be-ham-marbut dar masir-e vasl-e node be server-e Iran raf shod. (1) **domain be jaye host/IP:** dar halat-e pishfarz (ws+TLS) `ratholenode` az `SERVER` ham `remote_addr` va ham `hostname`/SNI ra misazad — pas ferestadan-e `host:443` az inventory (ke momken ast IP ya adres-e SSH bashad) baaes mishod SNI ba gvahi nakhand va tunnel bala nayad. hala hub domain-e vaghei ra az `ratholectl status --json` migirad (endpoint-e jadid `GET /api/servers/<iran>/mainconnect` + tabe-e moshtarak `iran_main_server()`)؛ ham dokme-ye «tanzim tunnel asli» va ham vasl-e khodkar hengam-e provision az domain estefade mikonand (ba fallback be host). (2) **node.env peyda nashod:** `ratholenode set SERVER …` rooye node-e taze-provision-shode (ke hanoz nasb-e kamel-e `--node` nashode) ba «node.env peyda nshd» die mikard؛ hala `cmd_set` fayl ra khodesh bootstrap mikonad (`env_set` ba `touch`+`chmod 600`) va faghat vaghti hadaghal yek service tarif shode `cmd_apply` ra seda mizanad (vagarna `SERVER` zakhire mishavad va baad az avalin `add-svc` tunnel sakhte mishavad)
 
