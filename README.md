@@ -95,6 +95,7 @@ Offline / local bundle (no download) still works via `bootstrap.sh` directly —
 Then add nodes from the Iran panel:
 
 ```bash
+ratholectl hub on <port>             # enable hub on port <port>
 ratholectl add trk01 2087            # → path /trk01 routed to that node
 ratholectl ls                        # list nodes + user paths
 ratholectl status                    # full dashboard: domain, ports, cert, services, nodes (--json for the hub)
