@@ -170,6 +170,14 @@ rathole-manager/
 docs/                     documentation + assets/ (SVG/PNG diagrams)
 ```
 
+Donation
+
+tether bep-20
+0x2364898407e8A42DA554B909989cd9B28eE61314
+
+ton ton
+UQCondoXRwQNt0fQvvmYGa_Fn39D9szjQH4eBqIcUd5r1yfH
+
 ---
 
 ## خلاصه‌ی فارسی
