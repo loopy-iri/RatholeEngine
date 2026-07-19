@@ -18,7 +18,7 @@ _Built for censorship-resistant tunneling into Iran._
 ![python](https://img.shields.io/badge/python-stdlib%20only-3776AB?logo=python&logoColor=white)
 ![tunnel](https://img.shields.io/badge/tunnel-rathole%20%2B%20nginx-7c3aed)
 
-[**English**](#what-is-this) · [**فارسی**](docs/README.fa.md) · [Quick start](#quick-start) · [Docs](#documentation)
+[**English**](#what-is-this) · [**فارسی**](docs/README.fa.md) · [Quick start](#quick-start) · [Docs](#documentation) · [Telegram](https://t.me/l8PY4NET)
 
 </div>
 
