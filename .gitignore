@@ -31,3 +31,4 @@ __pycache__/
 _finalize.py
 scratch_confirmed.txt
 opencode.json
+.worktrees/
