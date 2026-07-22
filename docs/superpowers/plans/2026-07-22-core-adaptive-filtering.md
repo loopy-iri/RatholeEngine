@@ -43,13 +43,12 @@
 
 **Files:**
 - Create: `tests/test_node_config.sh`
-- Create: `tests/test_hub.py`
-- Create: `tests/test_release_bundle.sh`
 - Modify: `.github/workflows/ci.yml`
-- Test: `tests/test_node_config.sh`, `tests/test_hub.py`, `tests/test_release_bundle.sh`
+- Modify: `rathole-manager/ratholenode`
+- Test: `tests/test_node_config.sh`
 
 **Interfaces:**
-- Produces: executable shell tests with `ok()`/`fail()` and Python `unittest` coverage.
+- Produces: executable shell tests with `ok()`/`fail()` and stdlib `tomllib` validation for empty and populated generated configs.
 - Produces: `RATHOLENODE_LIB_ONLY=1` contract so CLI functions can be sourced without dispatch.
 - Consumes: current `ratholenode`, `ratholectl`, `hub.py`, `package.sh`.
 
@@ -79,7 +78,7 @@ Run: `wsl bash -lc 'cd /mnt/d/MohammadHosein/projectsupertunnel && REPO_ROOT=$PW
 
 Expected: FAIL because `RATHOLENODE_LIB_ONLY` is ignored and/or empty `[client.services]` is not generated.
 
-- [ ] **Step 3: Add the minimal library dispatch seam and CI calls**
+- [ ] **Step 3: Add the library dispatch seam, empty table fix and CI call**
 
 Wrap the current bottom-level case in this exact interface, without changing command mapping:
 
@@ -92,27 +91,31 @@ main(){
 if [ "${RATHOLENODE_LIB_ONLY:-0}" != 1 ]; then main "$@"; fi
 ```
 
+Track the number of valid emitted services in `gen_client`; when it is zero, emit the required empty table:
+
+```bash
+echo "[client.services]"
+```
+
 Add CI commands:
 
 ```yaml
 - name: manager regression tests
   run: |
     bash tests/test_node_config.sh
-    python3 -m unittest -v tests/test_hub.py
-    bash tests/test_release_bundle.sh --source-only
 ```
 
 - [ ] **Step 4: Run the focused tests**
 
 Run: `wsl bash -lc 'cd /mnt/d/MohammadHosein/projectsupertunnel && REPO_ROOT=$PWD bash tests/test_node_config.sh'`
 
-Expected: still FAIL only on missing empty services table, proving the test reaches real generation code.
+Expected: PASS with the empty services table and one-service config both covered.
 
 - [ ] **Step 5: Commit the harness seam**
 
 ```bash
 git add tests .github/workflows/ci.yml rathole-manager/ratholenode
-git commit -m "test: add core and adaptive regression harness"
+git commit -m "fix(node): generate valid empty client services"
 ```
 
 ---
@@ -231,11 +234,7 @@ git commit -m "fix(core): retry websocket failures without panic"
 
 - [ ] **Step 1: Extend tests and verify RED**
 
-Add assertions that `gen_client`, `gen_up_client`, `gen_server_toml`, and `gen_noise_server_toml` call the common writer; hold `${CLIENT_TOML}.lock` in another process and prove commit waits instead of exposing an empty file. Also assert empty client services produces:
-
-```toml
-[client.services]
-```
+Add assertions that `gen_client`, `gen_up_client`, `gen_server_toml`, and `gen_noise_server_toml` call the common writer; hold `${CLIENT_TOML}.lock` in another process and prove commit waits instead of exposing an empty file. Keep the Task 1 empty-services regression in the focused suite.
 
 Run: `wsl bash tests/test_node_config.sh`
 
@@ -469,6 +468,7 @@ git commit -m "feat(node): add toggleable adaptive carrier failover"
 
 **Files:**
 - Create: `rathole-manager/core-install.sh`
+- Create: `tests/test_release_bundle.sh`
 - Modify: `rathole-manager/install-panel.sh`
 - Modify: `rathole-manager/install-node.sh`
 - Modify: `rathole-manager/update.sh`
@@ -524,7 +524,7 @@ git commit -m "feat(update): ship and roll back the patched core"
 
 **Files:**
 - Modify: `rathole-manager/ratholehub/hub.py`
-- Modify: `tests/test_hub.py`
+- Create: `tests/test_hub.py`
 - Test: `tests/test_hub.py`
 
 **Interfaces:**
