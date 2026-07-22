@@ -43,3 +43,7 @@ jobs:
         run: |
           python3 -m py_compile rathole-manager/ratholehub/hub.py
           echo "hub.py compiles OK"
+
+      - name: manager regression tests
+        run: |
+          bash tests/test_node_config.sh

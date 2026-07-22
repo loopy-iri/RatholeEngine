@@ -69,7 +69,7 @@ gen_client(){
   load_env
   [ -f "$SVC_FILE" ] || die "hich srvisi tarif nashode ($SVC_FILE). ba 'ratholenode add-svc' ezafe kon."
   local host="${SERVER%%:*}"
-  local mode="${TUNNEL:-ws}" remote tls hostline
+  local mode="${TUNNEL:-ws}" remote tls hostline emitted_services=0
   if [ "$mode" = "kcp" ]; then
     # masir az trigh kcptun lvkal mirvd; TLS lazem nist (kcp khodesh ramz/FEC darad)
     remote="${KCP_LOCAL:-127.0.0.1:29900}"
@@ -118,12 +118,17 @@ gen_client(){
         warn "khatt-e namotabar dar services.conf rad shod (name=$name)."
         continue
       fi
+      emitted_services=$((emitted_services + 1))
       echo
       echo "[client.services.${name}]"
       echo "token = \"${token}\""
       echo "local_addr = \"127.0.0.1:${inbound}\""
       echo "type = \"tcp\""
     done < "$SVC_FILE"
+    if [ "$emitted_services" -eq 0 ]; then
+      echo
+      echo "[client.services]"
+    fi
   } > "$CLIENT_TOML.tmp"
   # neveshtan in-place (hefz inode) ta rathole ba config_watcher hot-reload konad (bedoon ghati servicehaye faal mesl game)
   cat "$CLIENT_TOML.tmp" > "$CLIENT_TOML" && rm -f "$CLIENT_TOML.tmp"
@@ -1029,30 +1034,34 @@ ratholenode — mdirit klaint rathole (chnd service rooye yek tunnel)
 U
 }
 
-case "${1:-show}" in
-  apply)   cmd_apply ;;
-  add-svc) shift; cmd_add_svc "${1:-}" "${2:-}" "${3:-}" ;;
-  rm-svc)  shift; cmd_rm_svc "${1:-}" ;;
-  ls)      cmd_ls ;;
-  set)     shift; cmd_set "${1:-}" "${2:-}" ;;
-  check)   cmd_check ;;
-  tune)    cmd_tune ;;
-  kcp)     shift; cmd_kcp "$@" ;;
-  plain)   shift; cmd_plain "$@" ;;
-  noise)   shift; cmd_noise "$@" ;;
-  restart) need_root; restart_svc ;;
+main(){
+  case "${1:-show}" in
+    apply)   cmd_apply ;;
+    add-svc) shift; cmd_add_svc "${1:-}" "${2:-}" "${3:-}" ;;
+    rm-svc)  shift; cmd_rm_svc "${1:-}" ;;
+    ls)      cmd_ls ;;
+    set)     shift; cmd_set "${1:-}" "${2:-}" ;;
+    check)   cmd_check ;;
+    tune)    cmd_tune ;;
+    kcp)     shift; cmd_kcp "$@" ;;
+    plain)   shift; cmd_plain "$@" ;;
+    noise)   shift; cmd_noise "$@" ;;
+    restart) need_root; restart_svc ;;
 
-  watchdog) shift; cmd_watchdog "$@" ;;
-  migrate) cmd_migrate ;;
-  fakeweb) shift; cmd_fakeweb "${1:-}" "${2:-}" ;;
-  upstream) shift; cmd_upstream "$@" ;;
-  backup)  shift; cmd_backup "${1:-}" ;;
-  restore) shift; cmd_restore "${1:-}" ;;
-  show)    cmd_show ;;
-  status)  cmd_status ;;
-  update)  cmd_update ;;
-  logs)    shift; cmd_logs "${1:-50}" ;;
-  version|--version|-V) print_version node ;;
-  -h|--help|help) usage ;;
-  *) err "dstvr nashenakhte: $1"; usage; exit 1 ;;
-esac
+    watchdog) shift; cmd_watchdog "$@" ;;
+    migrate) cmd_migrate ;;
+    fakeweb) shift; cmd_fakeweb "${1:-}" "${2:-}" ;;
+    upstream) shift; cmd_upstream "$@" ;;
+    backup)  shift; cmd_backup "${1:-}" ;;
+    restore) shift; cmd_restore "${1:-}" ;;
+    show)    cmd_show ;;
+    status)  cmd_status ;;
+    update)  cmd_update ;;
+    logs)    shift; cmd_logs "${1:-50}" ;;
+    version|--version|-V) print_version node ;;
+    -h|--help|help) usage ;;
+    *) err "dstvr nashenakhte: $1"; usage; exit 1 ;;
+  esac
+}
+
+if [ "${RATHOLENODE_LIB_ONLY:-0}" != 1 ]; then main "$@"; fi
