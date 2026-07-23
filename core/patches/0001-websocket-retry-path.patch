@@ -1,0 +1,215 @@
+diff --git a/src/cli.rs b/src/cli.rs
+index 8959bd8..11648c1 100644
+--- a/src/cli.rs
++++ b/src/cli.rs
+@@ -8,10 +8,9 @@ pub enum KeypairType {
+ }
+ 
+ lazy_static! {
+-    static ref VERSION: &'static str =
+-        option_env!("VERGEN_GIT_DESCRIBE").unwrap_or(env!("VERGEN_BUILD_SEMVER"));
++    static ref VERSION: &'static str = env!("CARGO_PKG_VERSION");
+     static ref LONG_VERSION: String = format!(
+-        "
++        "{}
+ Build Timestamp:     {}
+ Build Version:       {}
+ Commit SHA:          {:?}
+@@ -21,6 +20,7 @@ cargo Target Triple: {}
+ cargo Profile:       {}
+ cargo Features:      {}
+ ",
++        *VERSION,
+         env!("VERGEN_BUILD_TIMESTAMP"),
+         env!("VERGEN_BUILD_SEMVER"),
+         option_env!("VERGEN_GIT_SHA"),
+@@ -83,4 +83,10 @@ mod tests {
+     fn cli_is_valid() {
+         Cli::command().debug_assert();
+     }
+-}
+\ No newline at end of file
++
++    #[test]
++    fn release_version_is_never_empty() {
++        assert_eq!(*VERSION, env!("CARGO_PKG_VERSION"));
++        assert!(LONG_VERSION.starts_with(env!("CARGO_PKG_VERSION")));
++    }
++}
+diff --git a/src/config.rs b/src/config.rs
+index 65ac3bd..34a1742 100644
+--- a/src/config.rs
++++ b/src/config.rs
+@@ -181,6 +181,12 @@ pub struct NoiseConfig {
+ #[serde(deny_unknown_fields)]
+ pub struct WebsocketConfig {
+     pub tls: bool,
++    #[serde(default = "default_websocket_path")]
++    pub path: String,
++}
++
++fn default_websocket_path() -> String {
++    "/".to_string()
+ }
+ 
+ fn default_nodelay() -> bool {
+@@ -277,7 +283,7 @@ pub struct Config {
+ }
+ 
+ impl Config {
+-    fn from_str(s: &str) -> Result<Config> {
++    pub(crate) fn from_str(s: &str) -> Result<Config> {
+         let mut config: Config = toml::from_str(s).with_context(|| "Failed to parse the config")?;
+ 
+         if let Some(server) = config.server.as_mut() {
+@@ -362,7 +368,18 @@ impl Config {
+                 // The check is done in transport
+                 Ok(())
+             }
+-            TransportType::Websocket => Ok(()),
++            TransportType::Websocket => {
++                let websocket = config
++                    .websocket
++                    .as_ref()
++                    .ok_or_else(|| anyhow!("Missing websocket configuration"))?;
++                if !websocket.path.starts_with('/')
++                    || websocket.path.bytes().any(|byte| byte.is_ascii_control())
++                {
++                    bail!("Websocket path must start with `/` and contain no control characters");
++                }
++                Ok(())
++            }
+         }
+     }
+ 
+@@ -404,6 +421,44 @@ mod tests {
+             .collect())
+     }
+ 
++    fn websocket_client_config(path: Option<&str>) -> String {
++        let path = path
++            .map(|value| format!("path = {value:?}\n"))
++            .unwrap_or_default();
++        format!(
++            "[client]\nremote_addr = \"127.0.0.1:2333\"\n\
++             [client.transport]\ntype = \"websocket\"\n\
++             [client.transport.websocket]\ntls = false\n{path}\
++             [client.services]\n"
++        )
++    }
++
++    #[test]
++    fn websocket_path_defaults_to_root() -> Result<()> {
++        let config = Config::from_str(&websocket_client_config(None))?;
++        assert_eq!(
++            config.client.unwrap().transport.websocket.unwrap().path,
++            "/"
++        );
++        Ok(())
++    }
++
++    #[test]
++    fn websocket_path_accepts_custom_absolute_path() -> Result<()> {
++        let config = Config::from_str(&websocket_client_config(Some("/_rh/test")))?;
++        assert_eq!(
++            config.client.unwrap().transport.websocket.unwrap().path,
++            "/_rh/test"
++        );
++        Ok(())
++    }
++
++    #[test]
++    fn websocket_path_rejects_invalid_values() {
++        assert!(Config::from_str(&websocket_client_config(Some("relative"))).is_err());
++        assert!(Config::from_str(&websocket_client_config(Some("/bad\npath"))).is_err());
++    }
++
+     #[test]
+     fn test_example_config() -> Result<()> {
+         let paths = get_all_example_config()?;
+diff --git a/src/transport/websocket.rs b/src/transport/websocket.rs
+index dbad2ab..dfb7c84 100644
+--- a/src/transport/websocket.rs
++++ b/src/transport/websocket.rs
+@@ -6,7 +6,7 @@ use std::task::{ready, Context, Poll};
+ 
+ use super::{AddrMaybeCached, SocketOpts, TcpTransport, TlsTransport, Transport};
+ use crate::config::TransportConfig;
+-use anyhow::anyhow;
++use anyhow::{anyhow, Context as AnyhowContext};
+ use async_trait::async_trait;
+ use bytes::Bytes;
+ use futures_core::stream::Stream;
+@@ -176,6 +176,7 @@ enum SubTransport {
+ pub struct WebsocketTransport {
+     sub: SubTransport,
+     conf: WebSocketConfig,
++    path: String,
+ }
+ 
+ #[async_trait]
+@@ -198,7 +199,11 @@ impl Transport for WebsocketTransport {
+             true => SubTransport::Secure(TlsTransport::new(config)?),
+             false => SubTransport::Insecure(TcpTransport::new(config)?),
+         };
+-        Ok(WebsocketTransport { sub, conf })
++        Ok(WebsocketTransport {
++            sub,
++            conf,
++            path: wsconfig.path.clone(),
++        })
+     }
+ 
+     fn hint(conn: &Self::Stream, opt: SocketOpts) {
+@@ -233,18 +238,48 @@ impl Transport for WebsocketTransport {
+     }
+ 
+     async fn connect(&self, addr: &AddrMaybeCached) -> anyhow::Result<Self::Stream> {
+-        let u = format!("ws://{}", &addr.addr.as_str());
+-        let url = Url::parse(&u).unwrap();
++        let u = format!("ws://{}{}", &addr.addr.as_str(), self.path);
++        let url = Url::parse(&u).context("invalid websocket url")?;
+         let tstream = match &self.sub {
+             SubTransport::Insecure(t) => TransportStream::Insecure(t.connect(addr).await?),
+             SubTransport::Secure(t) => TransportStream::Secure(t.connect(addr).await?),
+         };
+         let (wsstream, _) = client_async_with_config(url, tstream, Some(self.conf))
+             .await
+-            .expect("failed to connect");
++            .context("websocket handshake failed")?;
+         let tun = WebsocketTunnel {
+             inner: StreamReader::new(StreamWrapper { inner: wsstream }),
+         };
+         Ok(tun)
+     }
+ }
++
++#[cfg(test)]
++mod tests {
++    use super::*;
++    use crate::config::{TransportType, WebsocketConfig};
++
++    #[tokio::test]
++    async fn handshake_failure_returns_error_without_panicking() {
++        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
++        let listen_addr = listener.local_addr().unwrap();
++        tokio::spawn(async move {
++            let (stream, _) = listener.accept().await.unwrap();
++            drop(stream);
++        });
++
++        let config = TransportConfig {
++            transport_type: TransportType::Websocket,
++            websocket: Some(WebsocketConfig {
++                tls: false,
++                path: "/".to_string(),
++            }),
++            ..Default::default()
++        };
++        let transport = WebsocketTransport::new(&config).unwrap();
++        let remote = AddrMaybeCached::new(&listen_addr.to_string());
++        let task = tokio::spawn(async move { transport.connect(&remote).await });
++        let result = task.await.expect("websocket connect panicked");
++        assert!(result.is_err());
++    }
++}

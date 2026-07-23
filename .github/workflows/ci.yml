@@ -47,3 +47,6 @@ jobs:
       - name: manager regression tests
         run: |
           bash tests/test_node_config.sh
+
+      - name: verify pinned core patches
+        run: bash tests/test_core_patch.sh

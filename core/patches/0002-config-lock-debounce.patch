@@ -1,0 +1,194 @@
+diff --git a/Cargo.lock b/Cargo.lock
+index 35f697a..80d227c 100644
+--- a/Cargo.lock
++++ b/Cargo.lock
+@@ -775,6 +775,16 @@ dependencies = [
+  "percent-encoding",
+ ]
+ 
++[[package]]
++name = "fs2"
++version = "0.4.3"
++source = "registry+https://github.com/rust-lang/crates.io-index"
++checksum = "9564fc758e15025b46aa6643b1b77d047d1a56a1aea6e01002ac0c7026876213"
++dependencies = [
++ "libc",
++ "winapi",
++]
++
+ [[package]]
+ name = "fsevent-sys"
+ version = "4.1.0"
+@@ -1741,7 +1751,7 @@ dependencies = [
+ 
+ [[package]]
+ name = "rathole"
+-version = "0.6.0-beta.1"
++version = "0.5.1-ratholeengine.1"
+ dependencies = [
+  "anyhow",
+  "async-http-proxy",
+@@ -1754,6 +1764,7 @@ dependencies = [
+  "clap",
+  "console-subscriber",
+  "fdlimit",
++ "fs2",
+  "futures-core",
+  "futures-sink",
+  "hex",
+diff --git a/Cargo.toml b/Cargo.toml
+index 745f63b..5e8da27 100644
+--- a/Cargo.toml
++++ b/Cargo.toml
+@@ -1,6 +1,6 @@
+ [package]
+ name = "rathole"
+-version = "0.6.0-beta.1"
++version = "0.5.1-ratholeengine.1"
+ rust-version = "1.92"
+ edition = "2021"
+ authors = ["Yujia Qiao <code@rapiz.me>"]
+@@ -100,6 +100,7 @@ tracing = "0.1"
+ tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+ socket2 = { version = "0.4", features = ["all"] }
+ fdlimit = "0.2"
++fs2 = "0.4"
+ async-trait = "0.1"
+ snowstorm = { version = "0.4", optional = true, features = [
+     "stream",
+diff --git a/src/config_watcher.rs b/src/config_watcher.rs
+index 993fdcc..bd8631d 100644
+--- a/src/config_watcher.rs
++++ b/src/config_watcher.rs
+@@ -2,11 +2,14 @@ use crate::{
+     config::{ClientConfig, ClientServiceConfig, ServerConfig, ServerServiceConfig},
+     Config,
+ };
+-use anyhow::{Context, Result};
++use anyhow::{anyhow, Context, Result};
++use fs2::FileExt;
+ use std::{
+     collections::HashMap,
+     env,
++    fs::OpenOptions,
+     path::{Path, PathBuf},
++    time::Duration,
+ };
+ use tokio::sync::{broadcast, mpsc};
+ use tracing::{error, info, instrument};
+@@ -14,6 +17,52 @@ use tracing::{error, info, instrument};
+ #[cfg(feature = "notify")]
+ use notify::{EventKind, RecursiveMode, Watcher};
+ 
++const CONFIG_READ_RETRIES: usize = 3;
++const CONFIG_READ_RETRY_DELAY: Duration = Duration::from_millis(50);
++
++fn config_lock_path(path: &Path) -> PathBuf {
++    let mut lock_path = path.as_os_str().to_os_string();
++    lock_path.push(".lock");
++    PathBuf::from(lock_path)
++}
++
++async fn try_read_config(path: &Path) -> Result<Config> {
++    let mut last_error = None;
++
++    for attempt in 0..CONFIG_READ_RETRIES {
++        let path = path.to_owned();
++        let result = tokio::task::spawn_blocking(move || -> Result<Config> {
++            let lock = OpenOptions::new()
++                .create(true)
++                .read(true)
++                .write(true)
++                .open(config_lock_path(&path))
++                .with_context(|| "Failed to open the configuration lock")?;
++            FileExt::lock_shared(&lock)
++                .with_context(|| "Failed to acquire the shared configuration lock")?;
++            let raw = std::fs::read_to_string(&path)
++                .with_context(|| format!("Failed to read the config {:?}", path))?;
++            let config = Config::from_str(&raw).with_context(|| {
++                "Configuration is invalid. Please refer to the configuration specification."
++            });
++            let _ = FileExt::unlock(&lock);
++            config
++        })
++        .await
++        .map_err(|error| anyhow!("Configuration reader task failed: {error}"))?;
++
++        match result {
++            Ok(config) => return Ok(config),
++            Err(error) => last_error = Some(error),
++        }
++        if attempt + 1 < CONFIG_READ_RETRIES {
++            tokio::time::sleep(CONFIG_READ_RETRY_DELAY).await;
++        }
++    }
++
++    Err(last_error.unwrap_or_else(|| anyhow!("Configuration read failed without an attempt")))
++}
++
+ #[derive(Debug, PartialEq, Eq, Clone)]
+ pub enum ConfigChange {
+     General(Box<Config>), // Trigger a full restart
+@@ -100,7 +149,7 @@ pub struct ConfigWatcherHandle {
+ impl ConfigWatcherHandle {
+     pub async fn new(path: &Path, shutdown_rx: broadcast::Receiver<bool>) -> Result<Self> {
+         let (event_tx, event_rx) = mpsc::unbounded_channel();
+-        let origin_cfg = Config::from_file(path).await?;
++        let origin_cfg = try_read_config(path).await?;
+ 
+         // Initial start
+         event_tx
+@@ -170,8 +219,10 @@ async fn config_watcher(
+           e = fevent_rx.recv() => {
+             match e {
+               Some(_) => {
++                    tokio::time::sleep(CONFIG_READ_RETRY_DELAY).await;
++                    while fevent_rx.try_recv().is_ok() {}
+                     info!("Rescan the configuration");
+-                    let new = match Config::from_file(&path).await.with_context(|| "The changed configuration is invalid. Ignored") {
++                    let new = match try_read_config(&path).await.with_context(|| "The changed configuration is invalid. Ignored") {
+                       Ok(v) => v,
+                       Err(e) => {
+                         error!("{:#}", e);
+@@ -266,6 +317,41 @@ mod test {
+ 
+     use super::*;
+ 
++    #[tokio::test]
++    async fn locked_reader_never_observes_truncated_config() -> Result<()> {
++        let suffix = format!(
++            "{}-{}",
++            std::process::id(),
++            std::time::SystemTime::now()
++                .duration_since(std::time::UNIX_EPOCH)?
++                .as_nanos()
++        );
++        let path = std::env::temp_dir().join(format!("rathole-config-{suffix}.toml"));
++        let lock_path = config_lock_path(&path);
++        let lock = std::fs::OpenOptions::new()
++            .create(true)
++            .read(true)
++            .write(true)
++            .open(&lock_path)?;
++        fs2::FileExt::lock_exclusive(&lock)?;
++        std::fs::write(&path, "")?;
++
++        let reader_path = path.clone();
++        let reader = tokio::spawn(async move { try_read_config(&reader_path).await });
++        tokio::time::sleep(std::time::Duration::from_millis(75)).await;
++        std::fs::write(
++            &path,
++            "[client]\nremote_addr = \"127.0.0.1:2333\"\n[client.services]\n",
++        )?;
++        fs2::FileExt::unlock(&lock)?;
++
++        let config = reader.await??;
++        assert!(config.client.is_some());
++        let _ = std::fs::remove_file(path);
++        let _ = std::fs::remove_file(lock_path);
++        Ok(())
++    }
++
+     // macro to create map or set literal
+     macro_rules! collection {
+         // map-like
