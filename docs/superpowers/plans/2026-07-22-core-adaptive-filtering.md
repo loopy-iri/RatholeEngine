@@ -195,7 +195,7 @@ The last invalid read is logged once and ignored. Add a Rust test with an exclus
 
 - [ ] **Step 5: Implement the build script and run GREEN**
 
-`core/build.sh` must clone into a temp directory, verify `HEAD == RATHOLE_UPSTREAM_REV`, apply all patches with `git apply --check`, run `cargo test --locked`, build `--release --locked --target "$target"`, verify `--version`, and copy only the binary to the output directory.
+`core/build.sh` must clone into a temp directory, verify `HEAD == RATHOLE_UPSTREAM_REV`, apply all patches with `git apply --check`, run `cargo test --locked --lib --bins`, build `--release --locked --target "$target"`, verify `--version`, and copy only the binary to the output directory. The pinned upstream integration fixtures have expired TLS certificates and retry indefinitely after 2026, so they are excluded from the deterministic build gate; all upstream unit/bin tests and the added core regressions remain required.
 
 Run: `wsl bash tests/test_core_patch.sh`
 
