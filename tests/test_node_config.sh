@@ -17,7 +17,7 @@ find_toml_python(){
 TOML_PYTHON="$(find_toml_python)"
 assert_toml(){
   local file="$1" toml_file="$1"
-  if [ "$TOML_PYTHON" = python.exe ]; then
+  if [[ "$TOML_PYTHON" == *.exe ]]; then
     toml_file="$(wslpath -w "$file")"
   fi
   "$TOML_PYTHON" - "$toml_file" <<'PY' || fail "invalid TOML: $file"
