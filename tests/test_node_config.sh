@@ -12,7 +12,7 @@ find_toml_python(){
     echo "$candidate"
     return
   done
-  fail 'Python 3.11+ with stdlib tomllib is required'
+  fail 'Python 3.11+ ba tomllib standard lazem ast'
 }
 TOML_PYTHON="$(find_toml_python)"
 assert_toml(){
@@ -20,7 +20,7 @@ assert_toml(){
   if [[ "$TOML_PYTHON" == *.exe ]]; then
     toml_file="$(wslpath -w "$file")"
   fi
-  "$TOML_PYTHON" - "$toml_file" <<'PY' || fail "invalid TOML: $file"
+  "$TOML_PYTHON" - "$toml_file" <<'PY' || fail "TOML namotabar: $file"
 import pathlib
 import sys
 import tomllib
@@ -40,10 +40,10 @@ printf 'SERVER=panel.example:443\nWS_PATH=/_rh/test\n' > "$ENV_FILE"
 : > "$SVC_FILE"
 gen_client
 assert_toml "$CLIENT_TOML"
-grep -qx '\[client.services\]' "$CLIENT_TOML" || fail 'missing empty services table'
-ok 'empty services config is parseable and has a services table'
+grep -qx '\[client.services\]' "$CLIENT_TOML" || fail 'jadval services khali peyda nashod'
+ok 'config services khali parse shod va jadval darad'
 printf 'n1|token123|2087\n' > "$SVC_FILE"
 gen_client
 assert_toml "$CLIENT_TOML"
-grep -qx '\[client.services.n1\]' "$CLIENT_TOML" || fail 'missing configured service table'
-ok 'configured service config is parseable and has a service table'
+grep -qx '\[client.services.n1\]' "$CLIENT_TOML" || fail 'jadval services tanzim-shode peyda nashod'
+ok 'config services tanzim-shode parse shod va jadval darad'
