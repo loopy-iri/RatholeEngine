@@ -71,6 +71,18 @@ ensure_state(){
 
 gen_token(){ openssl rand -hex 16; }
 
+# masir-e makhfi WebSocket baraye kontroli — ba /_rh/<32 hex> tashkil mishavad.
+# ba source-e hash az state; agar vojood nadarad yek noskhe jadid miavrad va save mikonad.
+ensure_control_path(){
+  local p
+  p="$(jq -r '.control_path // empty' "$STATE" 2>/dev/null)"
+  if [ -z "$p" ]; then
+    p="/_rh/$(openssl rand -hex 16)"
+    state_set '.control_path' "$p" str
+  fi
+  printf '%s\n' "$p"
+}
+
 # ---------- tvlid keypair-e noise (X25519) baraye transport-e ramznegari-shode ----------
 # rathole --genkey do khat mide: "Private Key:" va "Public Key:" (base64). faghat agar hanooz set nashode.
 # NOTE: format-e daghigh-e khoruji-ye 'rathole --genkey' bayad ba binary-ye vaghei tayid shavad;
@@ -236,6 +248,8 @@ cmd_init(){
     '{domain:$d, cert_fullchain:$fc, cert_key:$key, nginx_conf:$nc, control_port:$ctrl,
       fake_port:$fake, sub_port:$sub, data_port_start:$ds, api_port_start:$apst, nodes:[]}' \
     > "$STATE"
+  # masir-e makhfi control WebSocket ra dar state bayaz mikonim (state_set zir set -uo darad)
+  ensure_control_path > /dev/null
   log "state sakhte shod: $STATE (nginx → $nconf)"
   regenerate
   log "init kamel shod."
@@ -369,8 +383,7 @@ gen_server_toml(){
       fi
     done
   } > "$SERVER_TOML.tmp"
-  # neveshtan in-place (hefz inode) ta rathole ba config_watcher khodesh hot-reload konad
-  cat "$SERVER_TOML.tmp" > "$SERVER_TOML" && rm -f "$SERVER_TOML.tmp"
+  rth_commit_config "$SERVER_TOML.tmp" "$SERVER_TOML"
 }
 
 # ---------- tvlid noise-server.toml (instans-e dovom-e rathole ba transport-e noise, rooye port-e omomi) ----------
@@ -421,8 +434,7 @@ gen_noise_server_toml(){
       fi
     done
   } > "$NOISE_TOML.tmp"
-  # neveshtan in-place (hefz inode) baraye hot-reload-e rathole-noise
-  cat "$NOISE_TOML.tmp" > "$NOISE_TOML" && rm -f "$NOISE_TOML.tmp"
+  rth_commit_config "$NOISE_TOML.tmp" "$NOISE_TOML"
 }
 
 # ---------- tvlid config nginx ----------
@@ -482,10 +494,15 @@ HB
     done
     echo "}"
     echo
-    echo "# rishh: sait fik (bedoon upgrade) ya channel kontroli rathole (ba websocket)"
+    # masir-e makhfi WebSocket; fallback-e / dige websocket ra be ctrl nemiferestad
+    local ctrl_path
+    ctrl_path="$(jq -r '.control_path // ""' "$STATE" 2>/dev/null)"
+    if [ -z "$ctrl_path" ] || [ "$ctrl_path" = "null" ]; then
+      ctrl_path="$(ensure_control_path)"
+    fi
+    echo "# rishh: sait fik; websocket faghat az tarigh masir-e makhfi be ctrl miravad"
     echo "map \$http_upgrade \$root_backend {"
     echo "    default      ${fake};"
-    echo "    websocket    ${ctrl};"
     echo "}"
     echo
     # halat direct-IP: masiryabi ba header (bedoon TLS). faghat agar direct_port set bashad.
@@ -531,6 +548,19 @@ server {
     ssl_ciphers HIGH:!aNULL:!MD5;
 ${hub_block}
     # rishh: tfkik sait fik az channel kontroli ba hdr Upgrade
+    location = ${ctrl_path} {
+        proxy_pass http://127.0.0.1:${ctrl};
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade \$http_upgrade;
+        proxy_set_header Connection \$connection_upgrade;
+        proxy_set_header Host \$host;
+        proxy_buffering off;
+        proxy_request_buffering off;
+        tcp_nodelay on;
+        proxy_read_timeout 86400s;
+        proxy_send_timeout 86400s;
+    }
+
     location = / {
         proxy_pass http://127.0.0.1:\$root_backend;
         proxy_http_version 1.1;
@@ -875,6 +905,7 @@ cmd_set(){
     fake-port)     state_set '.fake_port' "$val" num ;;
     sub-port)      state_set '.sub_port' "$val" num ;;
     control-port)  state_set '.control_port' "$val" num ;;
+    control-path) state_set '.control_path' "$val" str ;;
     *) die "kelid nashenakhte: $key" ;;
   esac
   log "tanzim shod: $key = $val"
@@ -2167,6 +2198,33 @@ dstvrha:
 USAGE
 }
 
+# ---------- control-path: namayesh va rotate-e masir-e makhfi WebSocket ----------
+cmd_control_path(){
+  local sub="${1:-show}"; shift || true
+  need_bin jq; ensure_state
+  case "$sub" in
+    show)
+      local p; p="$(jq -r '.control_path // empty' "$STATE" 2>/dev/null)"
+      [ -n "$p" ] && echo "control_path=$p" || echo "control_path=(set nashode — aval init ya regen bezan)"
+      ;;
+    rotate)
+      need_root
+      local old new
+      old="$(jq -r '.control_path // empty' "$STATE" 2>/dev/null)"
+      new="/_rh/$(openssl rand -hex 16)"
+      # masir-e ghabli ra baraye yek dore-ye gozar zakhire mikonim ta node-haye dar-hal-update ghat nakonand
+      state_set '.control_path_previous' "${old:-}" str
+      state_set '.control_path' "$new" str
+      regenerate
+      log "control-path rotate shod: $old → $new"
+      warn "hame-ye node-haye vasl-ra ba dastoor-e zir berooz kon:"
+      warn "  ratholenode set SERVER <panel-domain>:443  # ya az hub update bezan"
+      echo "new_control_path=$new"
+      ;;
+    *) die "estefade: ratholectl control-path show|rotate" ;;
+  esac
+}
+
 main(){
   local cmd="${1:-menu}"; shift || true
   case "$cmd" in
@@ -2210,6 +2268,7 @@ main(){
     direct) cmd_direct "$@" ;;
     noise)  cmd_noise "$@" ;;
 
+    control-path) cmd_control_path "${1:-show}" "$@" ;;
     game)   cmd_game "$@" ;;
     restart) need_root; systemctl restart "$RATHOLE_SVC" && log "$RATHOLE_SVC restart shod (hame tunnelha lhzhai ghat shdnd)." ;;
     enable) need_root; systemctl enable --now "$RATHOLE_SVC"; log "$RATHOLE_SVC faal shod." ;;
@@ -2221,4 +2280,4 @@ main(){
   esac
 }
 
-main "$@"
+if [ "${RATHOLECTL_LIB_ONLY:-0}" != 1 ]; then main "$@"; fi

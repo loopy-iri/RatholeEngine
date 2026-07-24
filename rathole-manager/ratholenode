@@ -69,7 +69,7 @@ gen_client(){
   load_env
   [ -f "$SVC_FILE" ] || die "hich srvisi tarif nashode ($SVC_FILE). ba 'ratholenode add-svc' ezafe kon."
   local host="${SERVER%%:*}"
-  local mode="${TUNNEL:-ws}" remote tls hostline
+  local mode="${TUNNEL:-ws}" remote tls hostline emitted_services=0
   if [ "$mode" = "kcp" ]; then
     # masir az trigh kcptun lvkal mirvd; TLS lazem nist (kcp khodesh ramz/FEC darad)
     remote="${KCP_LOCAL:-127.0.0.1:29900}"
@@ -102,6 +102,9 @@ gen_client(){
       echo "type = \"websocket\""
       echo "[client.transport.websocket]"
       echo "tls = ${tls}"
+      # masir-e makhfi control WebSocket (az node.env via WS_PATH; pishfarz '/')
+      local ws_path="${WS_PATH:-/}"
+      echo "path = \"${ws_path}\""
       if [ "$tls" = "true" ]; then
         echo "[client.transport.tls]"
         echo "$hostline"
@@ -118,15 +121,20 @@ gen_client(){
         warn "khatt-e namotabar dar services.conf rad shod (name=$name)."
         continue
       fi
+      emitted_services=$((emitted_services + 1))
       echo
       echo "[client.services.${name}]"
       echo "token = \"${token}\""
       echo "local_addr = \"127.0.0.1:${inbound}\""
       echo "type = \"tcp\""
     done < "$SVC_FILE"
+    if [ "$emitted_services" -eq 0 ]; then
+      echo
+      echo "[client.services]"
+    fi
   } > "$CLIENT_TOML.tmp"
-  # neveshtan in-place (hefz inode) ta rathole ba config_watcher hot-reload konad (bedoon ghati servicehaye faal mesl game)
-  cat "$CLIENT_TOML.tmp" > "$CLIENT_TOML" && rm -f "$CLIENT_TOML.tmp"
+  # neveshtan in-place lock-shode (hefz inode) ta rathole ba config_watcher hot-reload konad
+  rth_commit_config "$CLIENT_TOML.tmp" "$CLIENT_TOML"
 }
 
 # restart kamel (fght baraye taghir trnspvrt mesl kcp on/off lazem ast)
@@ -606,7 +614,7 @@ gen_up_client(){
       done < "$(up_svc "$id")"
     fi
   } > "$toml.tmp"
-  cat "$toml.tmp" > "$toml" && rm -f "$toml.tmp"
+  rth_commit_config "$toml.tmp" "$toml"
 }
 
 # ---------- kcp baraye upstream (har server airan, tunnel FEC jda) ----------
@@ -1029,30 +1037,276 @@ ratholenode — mdirit klaint rathole (chnd service rooye yek tunnel)
 U
 }
 
-case "${1:-show}" in
-  apply)   cmd_apply ;;
-  add-svc) shift; cmd_add_svc "${1:-}" "${2:-}" "${3:-}" ;;
-  rm-svc)  shift; cmd_rm_svc "${1:-}" ;;
-  ls)      cmd_ls ;;
-  set)     shift; cmd_set "${1:-}" "${2:-}" ;;
-  check)   cmd_check ;;
-  tune)    cmd_tune ;;
-  kcp)     shift; cmd_kcp "$@" ;;
-  plain)   shift; cmd_plain "$@" ;;
-  noise)   shift; cmd_noise "$@" ;;
-  restart) need_root; restart_svc ;;
+# ============ adaptive: probe functions (Task 5) ============
 
-  watchdog) shift; cmd_watchdog "$@" ;;
-  migrate) cmd_migrate ;;
-  fakeweb) shift; cmd_fakeweb "${1:-}" "${2:-}" ;;
-  upstream) shift; cmd_upstream "$@" ;;
-  backup)  shift; cmd_backup "${1:-}" ;;
-  restore) shift; cmd_restore "${1:-}" ;;
-  show)    cmd_show ;;
-  status)  cmd_status ;;
-  update)  cmd_update ;;
-  logs)    shift; cmd_logs "${1:-50}" ;;
-  version|--version|-V) print_version node ;;
-  -h|--help|help) usage ;;
-  *) err "dstvr nashenakhte: $1"; usage; exit 1 ;;
-esac
+# masir-e state baraye adaptive
+ADAPTIVE_STATE="${ADAPTIVE_STATE:-/etc/rathole/adaptive-state.json}"
+ADAPTIVE_ENV="${ADAPTIVE_ENV:-/etc/rathole/adaptive.env}"
+
+# probe TCP (hata agar TLS/WS fail shavad, port-e TCP ra check kon)
+# $1=host $2=port  → khoruji: healthy|tcp_timeout|tcp_refused|tcp_failed
+adaptive_probe_tcp(){
+  local host="$1" port="$2"
+  local t0 t1 ms
+  t0="$(date +%s%3N 2>/dev/null || echo 0)"
+  if timeout 5 bash -c "exec 3<>/dev/tcp/${host}/${port}" 2>/dev/null; then
+    exec 3>&- 2>/dev/null || true
+    t1="$(date +%s%3N 2>/dev/null || echo "$t0")"
+    ms=$(( t1 - t0 ))
+    echo "healthy:${ms}"
+    return 0
+  fi
+  local rc=$?
+  t1="$(date +%s%3N 2>/dev/null || echo "$t0")"
+  ms=$(( t1 - t0 ))
+  if [ "$rc" -eq 124 ]; then echo "tcp_timeout:${ms}"; else echo "tcp_refused:${ms}"; fi
+  return 1
+}
+
+# probe WebSocket TLS (RFC 6455 handshake)
+# $1=host $2=port $3=path → healthy|ws_rejected|ws_timeout|tls_failed
+adaptive_probe_ws_tls(){
+  local host="$1" port="${2:-443}" path="${3:-/}"
+  local t0 t1 ms out
+  t0="$(date +%s%3N 2>/dev/null || echo 0)"
+  out="$(printf 'GET %s HTTP/1.1\r\nHost: %s\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\r\nSec-WebSocket-Version: 13\r\n\r\n' \
+    "$path" "$host" | timeout 8 openssl s_client -connect "${host}:${port}" \
+      -servername "$host" -verify_return_error -quiet 2>/dev/null)" || {
+    t1="$(date +%s%3N 2>/dev/null || echo "$t0")"; ms=$(( t1 - t0 ))
+    echo "tls_failed:${ms}"; return 1
+  }
+  t1="$(date +%s%3N 2>/dev/null || echo "$t0")"; ms=$(( t1 - t0 ))
+  if echo "$out" | grep -q 'HTTP/1.1 101'; then echo "healthy:${ms}"; return 0
+  else echo "ws_rejected:${ms}"; return 1; fi
+}
+
+# probe WebSocket plain (bedoon TLS, baraye halat plain)
+adaptive_probe_ws_plain(){
+  local host="$1" port="${2:-8880}" path="${3:-/}"
+  local t0 t1 ms out
+  t0="$(date +%s%3N 2>/dev/null || echo 0)"
+  out="$(printf 'GET %s HTTP/1.1\r\nHost: %s\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\r\nSec-WebSocket-Version: 13\r\n\r\n' \
+    "$path" "$host" | timeout 5 bash -c "
+      exec 3<>/dev/tcp/${host}/${port}
+      cat >&3
+      timeout 3 cat <&3
+      exec 3>&-
+    " 2>/dev/null)" || {
+    t1="$(date +%s%3N 2>/dev/null || echo "$t0")"; ms=$(( t1 - t0 ))
+    echo "ws_timeout:${ms}"; return 1
+  }
+  t1="$(date +%s%3N 2>/dev/null || echo "$t0")"; ms=$(( t1 - t0 ))
+  if echo "$out" | grep -q 'HTTP/1.1 101'; then echo "healthy:${ms}"; return 0
+  else echo "ws_rejected:${ms}"; return 1; fi
+}
+
+# probe KCP (UDP: faqat TCP-level check rooye KCP_LOCAL port)
+adaptive_probe_kcp(){
+  local kcp_local="${KCP_LOCAL:-127.0.0.1:29900}"
+  local h="${kcp_local%%:*}" p="${kcp_local##*:}"
+  adaptive_probe_tcp "$h" "$p"
+}
+
+# ejra-ye probe-ha va naveshtan state (baraye sandoz bast: mock-pezir)
+adaptive_run_probe(){
+  load_env
+  local host="${SERVER%%:*}" port="${SERVER##*:}" path="${WS_PATH:-/}" mode="${TUNNEL:-ws}"
+  local cls ms result
+  local t0; t0="$(date +%s%3N 2>/dev/null || echo 0)"
+  local failures=0
+  [ -f "$ADAPTIVE_STATE" ] && failures="$(python3 -c "import json; d=json.load(open('$ADAPTIVE_STATE')); print(d.get('consecutive_failures',0))" 2>/dev/null || echo 0)"
+
+  case "$mode" in
+    ws)   result="$(adaptive_probe_ws_tls "$host" "$port" "$path" 2>/dev/null)" ;;
+    plain) result="$(adaptive_probe_ws_plain "$host" "${PLAIN_REMOTE##*:}" "/" 2>/dev/null)" ;;
+    kcp)  result="$(adaptive_probe_kcp 2>/dev/null)" ;;
+    *)    result="healthy:0" ;;
+  esac
+
+  cls="${result%%:*}"; ms="${result##*:}"
+  local now; now="$(date -u +%Y-%m-%dT%H:%M:%SZ 2>/dev/null || echo '')"
+  if [ "$cls" = "healthy" ]; then failures=0; else failures=$(( failures + 1 )); fi
+
+  # neveshtan state (bedoon secret-ha)
+  local tmp; tmp="$(mktemp)"
+  printf '{"time":"%s","current":"%s","classification":"%s","latency_ms":%s,"consecutive_failures":%d}\n' \
+    "$now" "$mode" "$cls" "$ms" "$failures" > "$tmp"
+  chmod 600 "$tmp"
+  mkdir -p "$(dirname "$ADAPTIVE_STATE")"
+  mv "$tmp" "$ADAPTIVE_STATE"
+  echo "$cls"
+}
+
+# agar baraye test source shode, alias darkhast mikonim
+adaptive_run_probe_test(){ adaptive_run_probe "$@"; }
+
+# ============ adaptive: controller logic (Task 6) ============
+
+# barre barresi aya switch lazem ast
+# $1=current_failures $2=threshold $3=current_recoveries $4=cooldown_remaining
+# → yes|no
+adaptive_should_switch(){
+  local failures="${1:-0}" threshold="${2:-3}" recoveries="${3:-0}" cooldown_rem="${4:-0}"
+  if [ "$cooldown_rem" -gt 0 ] && [ "$failures" -eq 0 ]; then echo "no"; return; fi
+  if [ "$failures" -ge "$threshold" ]; then echo "yes"; return; fi
+  echo "no"
+}
+
+# plain mojaz ast faqat ba ALLOW_INSECURE=1
+adaptive_plain_allowed(){
+  local allow="${ALLOW_INSECURE:-0}"
+  [ "$allow" = "1" ] && echo "yes" || echo "no"
+}
+
+# load tanzimat adaptive
+adaptive_load_env(){
+  [ -f "$ADAPTIVE_ENV" ] && { set -a; . "$ADAPTIVE_ENV"; set +a; } || true
+  ADAPTIVE_ENABLED="${ADAPTIVE_ENABLED:-0}"
+  ADAPTIVE_INTERVAL="${ADAPTIVE_INTERVAL:-30}"
+  ADAPTIVE_FAILURES="${ADAPTIVE_FAILURES:-3}"
+  ADAPTIVE_RECOVERIES="${ADAPTIVE_RECOVERIES:-5}"
+  ADAPTIVE_COOLDOWN="${ADAPTIVE_COOLDOWN:-300}"
+  ALLOW_INSECURE="${ALLOW_INSECURE:-0}"
+}
+
+# dastoor adaptive
+cmd_adaptive(){
+  local sub="${1:-status}"; shift || true
+  case "$sub" in
+    on)
+      need_root
+      local interval="${ADAPTIVE_INTERVAL:-30}" failures="${ADAPTIVE_FAILURES:-3}" recoveries="${ADAPTIVE_RECOVERIES:-5}"
+      while [ $# -gt 0 ]; do case "$1" in
+        --interval)  interval="$2"; shift 2;;
+        --failures)  failures="$2"; shift 2;;
+        --recoveries) recoveries="$2"; shift 2;;
+        *) shift;;
+      esac; done
+      echo "$interval" | grep -qE '^[0-9]+$' || die "interval bayad adad bashad."
+      echo "$failures" | grep -qE '^[0-9]+$' || die "failures bayad adad bashad."
+      echo "$recoveries" | grep -qE '^[0-9]+$' || die "recoveries bayad adad bashad."
+      mkdir -p "$(dirname "$ADAPTIVE_ENV")"
+      printf 'ADAPTIVE_ENABLED=1\nADAPTIVE_INTERVAL=%s\nADAPTIVE_FAILURES=%s\nADAPTIVE_RECOVERIES=%s\nADAPTIVE_COOLDOWN=300\nALLOW_INSECURE=0\n' \
+        "$interval" "$failures" "$recoveries" > "$ADAPTIVE_ENV"
+      chmod 600 "$ADAPTIVE_ENV"
+      # systemd timer (agar mojood bashad)
+      if command -v systemctl >/dev/null 2>&1; then
+        cat > /etc/systemd/system/rathole-adaptive.service <<UNIT
+[Unit]
+Description=rathole adaptive carrier probe
+[Service]
+Type=oneshot
+ExecStart=/usr/local/bin/ratholenode adaptive run
+UNIT
+        cat > /etc/systemd/system/rathole-adaptive.timer <<TIMER
+[Unit]
+Description=rathole adaptive probe timer
+[Timer]
+OnBootSec=45s
+OnUnitActiveSec=${interval}s
+RandomizedDelaySec=5s
+[Install]
+WantedBy=timers.target
+TIMER
+        systemctl daemon-reload 2>/dev/null || true
+        systemctl enable --now rathole-adaptive.timer 2>/dev/null || true
+      fi
+      log "adaptive on shod (interval=${interval}s, failures=${failures}, recoveries=${recoveries})."
+      ;;
+    off)
+      need_root
+      if command -v systemctl >/dev/null 2>&1; then
+        systemctl disable --now rathole-adaptive.timer 2>/dev/null || true
+      fi
+      if [ -f "$ADAPTIVE_ENV" ]; then
+        sed -i 's/^ADAPTIVE_ENABLED=.*/ADAPTIVE_ENABLED=0/' "$ADAPTIVE_ENV"
+      fi
+      log "adaptive off shod (mode-e feli hefz shod)."
+      ;;
+    status)
+      adaptive_load_env
+      if [ "$ADAPTIVE_ENABLED" = "1" ]; then
+        log "adaptive: ROSHAN (interval=${ADAPTIVE_INTERVAL}s, failures=${ADAPTIVE_FAILURES}, recoveries=${ADAPTIVE_RECOVERIES})"
+      else
+        log "adaptive: KHAMOOSH"
+      fi
+      if [ -f "$ADAPTIVE_STATE" ]; then
+        local cls ms fails
+        cls="$(python3 -c "import json; d=json.load(open('$ADAPTIVE_STATE')); print(d.get('classification','?'))" 2>/dev/null || echo '?')"
+        fails="$(python3 -c "import json; d=json.load(open('$ADAPTIVE_STATE')); print(d.get('consecutive_failures',0))" 2>/dev/null || echo '?')"
+        ms="$(python3 -c "import json; d=json.load(open('$ADAPTIVE_STATE')); print(d.get('latency_ms','?'))" 2>/dev/null || echo '?')"
+        log "akharin probe: $cls (latency=${ms}ms, failures=$fails)"
+      fi
+      ;;
+    test)
+      local as_json=0; [ "${1:-}" = "--json" ] && as_json=1
+      load_env
+      adaptive_run_probe 2>/dev/null || true
+      if [ "$as_json" -eq 1 ] && [ -f "$ADAPTIVE_STATE" ]; then
+        cat "$ADAPTIVE_STATE"
+      else
+        [ -f "$ADAPTIVE_STATE" ] && python3 -c "
+import json
+d = json.load(open('$ADAPTIVE_STATE'))
+print('classification:', d.get('classification','?'))
+print('latency_ms:', d.get('latency_ms','?'))
+print('consecutive_failures:', d.get('consecutive_failures','?'))
+" 2>/dev/null || true
+      fi
+      ;;
+    run)
+      # ejra-ye controller: switch-e carrier agar lazem bashad
+      need_root; adaptive_load_env; load_env
+      [ "$ADAPTIVE_ENABLED" = "1" ] || { warn "adaptive khamoosh ast."; exit 0; }
+      # flock: faghat yek instance hamzaman
+      (
+        flock -n 9 || { warn "yek controller-e digar dar hal ejrast."; exit 0; }
+        cls="$(adaptive_run_probe 2>/dev/null || echo 'probe_failed')"
+        failures="$(python3 -c "import json; d=json.load(open('$ADAPTIVE_STATE')); print(d.get('consecutive_failures',0))" 2>/dev/null || echo 0)"
+        switch="$(adaptive_should_switch "$failures" "$ADAPTIVE_FAILURES" 0 0)"
+        if [ "$switch" = "yes" ]; then
+          local cur="${TUNNEL:-ws}" next
+          case "$cur" in ws) next=kcp ;; kcp) next=ws ;; *) next=ws ;; esac
+          warn "adaptive: switch az '$cur' be '$next' (failures=$failures)"
+          env_set TUNNEL "$next"
+          gen_client
+          reload_svc
+        fi
+      ) 9>/run/rathole-adaptive.lock || true
+      ;;
+    *) die "estefade: ratholenode adaptive on|off|status|test|run" ;;
+  esac
+}
+
+main(){
+  case "${1:-show}" in
+    apply)   cmd_apply ;;
+    add-svc) shift; cmd_add_svc "${1:-}" "${2:-}" "${3:-}" ;;
+    rm-svc)  shift; cmd_rm_svc "${1:-}" ;;
+    ls)      cmd_ls ;;
+    set)     shift; cmd_set "${1:-}" "${2:-}" ;;
+    check)   cmd_check ;;
+    tune)    cmd_tune ;;
+    kcp)     shift; cmd_kcp "$@" ;;
+    plain)   shift; cmd_plain "$@" ;;
+    noise)   shift; cmd_noise "$@" ;;
+    restart) need_root; restart_svc ;;
+
+    watchdog) shift; cmd_watchdog "$@" ;;
+    migrate) cmd_migrate ;;
+    fakeweb) shift; cmd_fakeweb "${1:-}" "${2:-}" ;;
+    upstream) shift; cmd_upstream "$@" ;;
+    backup)  shift; cmd_backup "${1:-}" ;;
+    restore) shift; cmd_restore "${1:-}" ;;
+    show)    cmd_show ;;
+    status)  cmd_status ;;
+    update)  cmd_update ;;
+    adaptive) shift; cmd_adaptive "$@" ;;
+    logs)    shift; cmd_logs "${1:-50}" ;;
+    version|--version|-V) print_version node ;;
+    -h|--help|help) usage ;;
+    *) err "dstvr nashenakhte: $1"; usage; exit 1 ;;
+  esac
+}
+
+if [ "${RATHOLENODE_LIB_ONLY:-0}" != 1 ]; then main "$@"; fi

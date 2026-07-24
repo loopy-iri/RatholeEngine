@@ -64,6 +64,8 @@ The same tunnel can be carried four ways (plus a game/SNI L4 mode) — switching
 - **plain** — no-TLS websocket to a separate HTTP listener (lighter, unencrypted).
 - **noise** — encrypted transport (Noise/X25519) on a second rathole instance, no TLS/cert.
 - **game / SNI** — L4 passthrough on 443; TLS terminates on the node (VLESS+TLS+Vision).
+- **adaptive failover** *(v1.5.0)* — timer-driven probes classify each carrier (`healthy / tls_failed / tcp_timeout / …`) and auto-switch between ws and kcp with hysteresis + cooldown; plain requires explicit `ALLOW_INSECURE=1`.
+- **secret control path** *(v1.5.0)* — WebSocket control upgraded from `/` to `/_rh/<32 hex>`; nginx routes only that exact path to rathole; all other paths retain fake-site behaviour.
 
 Details: [`docs/transport-modes.md`](docs/transport-modes.md).
 
