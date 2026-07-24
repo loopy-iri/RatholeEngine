@@ -22,10 +22,10 @@ for a in "$@"; do
   esac
 done
 
-# architecture: x86_64 → x86_64-unknown-linux-gnu, aarch64 → aarch64-unknown-linux-musl
+# architecture: x86_64 → x86_64-unknown-linux-gnu, aarch64 → aarch64-unknown-linux-gnu
 case "$(uname -m)" in
   x86_64)  TARGET="x86_64-unknown-linux-gnu" ;;
-  aarch64) TARGET="aarch64-unknown-linux-musl" ;;
+  aarch64) TARGET="aarch64-unknown-linux-gnu" ;;
   *) die "memari poshtibani-nashode: $(uname -m)" ;;
 esac
 

@@ -15,7 +15,7 @@ RATHOLE_REQUIRE_CORE="${RATHOLE_REQUIRE_CORE:-0}"
 CORE_OK=0
 if [ -f "$SRC/core/SHA256SUMS" ] && \
    [ -f "$SRC/core/x86_64-unknown-linux-gnu/rathole" ] && \
-   [ -f "$SRC/core/aarch64-unknown-linux-musl/rathole" ]; then
+   [ -f "$SRC/core/aarch64-unknown-linux-gnu/rathole" ]; then
   CORE_OK=1
 fi
 if [ "$RATHOLE_REQUIRE_CORE" = "1" ] && [ "$CORE_OK" -eq 0 ]; then

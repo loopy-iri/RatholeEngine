@@ -15,15 +15,15 @@ ok 'core-install.sh: syntax OK'
   DIR="$(mktemp -d)"; trap 'rm -rf "$DIR"' EXIT
   CORE_DIR="$DIR/core"
   mkdir -p "$CORE_DIR/x86_64-unknown-linux-gnu"
-  mkdir -p "$CORE_DIR/aarch64-unknown-linux-musl"
+  mkdir -p "$CORE_DIR/aarch64-unknown-linux-gnu"
 
   # binary-e fake baraye har do architecture
   printf '#!/bin/sh\necho "rathole 0.5.1-ratholeengine.1"\n' > "$CORE_DIR/x86_64-unknown-linux-gnu/rathole"
-  printf '#!/bin/sh\necho "rathole 0.5.1-ratholeengine.1"\n' > "$CORE_DIR/aarch64-unknown-linux-musl/rathole"
+  printf '#!/bin/sh\necho "rathole 0.5.1-ratholeengine.1"\n' > "$CORE_DIR/aarch64-unknown-linux-gnu/rathole"
   chmod +x "$CORE_DIR"/*/rathole
 
   # SHA256SUMS ba checksum-e voroodi (x86_64)
-  ( cd "$CORE_DIR" && sha256sum "x86_64-unknown-linux-gnu/rathole" "aarch64-unknown-linux-musl/rathole" > SHA256SUMS )
+  ( cd "$CORE_DIR" && sha256sum "x86_64-unknown-linux-gnu/rathole" "aarch64-unknown-linux-gnu/rathole" > SHA256SUMS )
   ok 'core: SHA256SUMS ba checksum-e motabar sakhte shod'
 
   # verify-only bayad pass kone

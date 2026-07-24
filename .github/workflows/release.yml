@@ -24,19 +24,19 @@ jobs:
         include:
           - target: x86_64-unknown-linux-gnu
             runner: ubuntu-latest
-          - target: aarch64-unknown-linux-musl
+          - target: aarch64-unknown-linux-gnu
             runner: ubuntu-24.04-arm
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Install Rust + cross-compile tools
+      - name: Install Rust + build tools
         run: |
           curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --default-toolchain stable --no-modify-path
           echo "$HOME/.cargo/bin" >> "$GITHUB_PATH"
           rustup target add ${{ matrix.target }}
           sudo apt-get update -y
-          sudo apt-get install -y build-essential musl-tools libssl-dev pkg-config
+          sudo apt-get install -y build-essential libssl-dev pkg-config
 
       - name: Build core binary
         run: |
@@ -71,8 +71,8 @@ jobs:
       - name: Download core (aarch64)
         uses: actions/download-artifact@v4
         with:
-          name: core-aarch64-unknown-linux-musl
-          path: rathole-manager/core/aarch64-unknown-linux-musl/
+          name: core-aarch64-unknown-linux-gnu
+          path: rathole-manager/core/aarch64-unknown-linux-gnu/
 
       - name: Make binaries executable
         run: chmod +x rathole-manager/core/*/rathole
@@ -80,7 +80,7 @@ jobs:
       - name: Generate SHA256SUMS
         run: |
           cd rathole-manager/core
-          sha256sum x86_64-unknown-linux-gnu/rathole aarch64-unknown-linux-musl/rathole > SHA256SUMS
+          sha256sum x86_64-unknown-linux-gnu/rathole aarch64-unknown-linux-gnu/rathole > SHA256SUMS
           cat SHA256SUMS
 
       - name: Verify checksums
