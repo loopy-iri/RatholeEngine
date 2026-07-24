@@ -185,7 +185,18 @@ install_rathole(){
   fi
   log "rathole nasb shod: $(/usr/local/bin/rathole --version 2>/dev/null || echo ok)"
 }
-install_rathole
+
+# agar core/SHA256SUMS vojood darad (bundle-e patched-e 1.5.0), az core-install estefade kon
+# vagarna install_rathole (download-e upstream) ra ejra kon.
+if [ -f "$SCRIPT_DIR/core/SHA256SUMS" ] && [ -f "$SCRIPT_DIR/core-install.sh" ]; then
+  log "core-install.sh peyda shod — nasb binary-e patched..."
+  bash "$SCRIPT_DIR/core-install.sh" || {
+    warn "core-install shekast khord; fallback be download-e upstream..."
+    install_rathole
+  }
+else
+  install_rathole
+fi
 
 
 # ---------- dairktvriha va ratholectl ----------

@@ -8,7 +8,7 @@
 set -euo pipefail
 
 RATHOLE_VERSION="${RATHOLE_VERSION:-v0.5.0}"
-SERVER="" NAME="" TOKEN="" INBOUND="" API_TOKEN="" API_INBOUND="" RESTORE=""
+SERVER="" NAME="" TOKEN="" INBOUND="" API_TOKEN="" API_INBOUND="" RESTORE="" WS_PATH=""
 
 log(){ printf '\033[1;32m[+]\033[0m %s\n' "$*"; }
 warn(){ printf '\033[1;33m[*]\033[0m %s\n' "$*"; }
@@ -24,6 +24,7 @@ while [ $# -gt 0 ]; do
     --api-token)         API_TOKEN="$2"; shift 2;;
     --api-inbound-port)  API_INBOUND="$2"; shift 2;;
     --restore)           RESTORE="$2"; shift 2;;
+    --ws-path)           WS_PATH="$2"; shift 2;;
     --version)           RATHOLE_VERSION="$2"; shift 2;;
     *) die "argument nashenakhte: $1";;
   esac
@@ -54,6 +55,12 @@ if ! command -v rathole >/dev/null 2>&1; then
   unzip -o "$tmp/rathole.zip" -d "$tmp" >/dev/null
   install -m 755 "$tmp/rathole" /usr/local/bin/rathole
   rm -rf "$tmp"
+fi
+
+# agar core/SHA256SUMS vojood darad, az binary-e patched-e bundle estefade kon
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+if [ -f "$SCRIPT_DIR/core/SHA256SUMS" ] && [ -f "$SCRIPT_DIR/core-install.sh" ]; then
+  bash "$SCRIPT_DIR/core-install.sh" 2>/dev/null || command -v rathole > /dev/null || die "nasb binary shekast khord."
 fi
 
 mkdir -p /etc/rathole
@@ -99,7 +106,7 @@ fi
 
 # ---------- nasb tazh ----------
 log "neveshtan /etc/rathole/node.env va services.conf..."
-{ echo "SERVER=${SERVER}"; echo "RATHOLE_VERSION=${RATHOLE_VERSION}"; } > /etc/rathole/node.env
+{ echo "SERVER=${SERVER}"; echo "RATHOLE_VERSION=${RATHOLE_VERSION}"; [ -n "$WS_PATH" ] && echo "WS_PATH=${WS_PATH}" || true; } > /etc/rathole/node.env
 chmod 600 /etc/rathole/node.env
 {
   echo "${NAME}|${TOKEN}|${INBOUND}"
