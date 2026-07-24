@@ -15,6 +15,21 @@ die(){ err "$*"; exit 1; }
 ask_yn(){ local p="$1" a; read -rp "$p [y/N]: " a; [[ "$a" =~ ^[Yy]$ ]]; }
 need_root(){ [ "$(id -u)" -eq 0 ] || die "bayad ba root ejra shavad (sudo)."; }
 
+# neveshtan-e amn-e in-place ba lock-e sidecar (hefz inode baraye hot-reload-e rathole).
+# $1 = file-e movaqqat (generated); $2 = file-e live (masir-e vaghei config).
+# agar src khali bashad (0 byte) rad mikonad ta rathole config-e naghes nabinad.
+rth_commit_config(){
+  local src="$1" dst="$2" lock="${2}.lock"
+  [ -s "$src" ] || { err "config-e jadid khali ast: $src"; return 1; }
+  mkdir -p "$(dirname "$dst")"
+  (
+    flock -x 9
+    cat "$src" > "$dst"
+  ) 9>"$lock" || return 1
+  rm -f "$src"
+}
+
+
 # chap-e noskhe — ham baraye ensan ham machine-parseable (hub 'manager_version=' ra migirad).
 # $1=role (panel|node|hub) faghat baraye namayesh; rathole-version az binari khande mishavad.
 print_version(){

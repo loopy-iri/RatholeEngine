@@ -369,8 +369,7 @@ gen_server_toml(){
       fi
     done
   } > "$SERVER_TOML.tmp"
-  # neveshtan in-place (hefz inode) ta rathole ba config_watcher khodesh hot-reload konad
-  cat "$SERVER_TOML.tmp" > "$SERVER_TOML" && rm -f "$SERVER_TOML.tmp"
+  rth_commit_config "$SERVER_TOML.tmp" "$SERVER_TOML"
 }
 
 # ---------- tvlid noise-server.toml (instans-e dovom-e rathole ba transport-e noise, rooye port-e omomi) ----------
@@ -421,8 +420,7 @@ gen_noise_server_toml(){
       fi
     done
   } > "$NOISE_TOML.tmp"
-  # neveshtan in-place (hefz inode) baraye hot-reload-e rathole-noise
-  cat "$NOISE_TOML.tmp" > "$NOISE_TOML" && rm -f "$NOISE_TOML.tmp"
+  rth_commit_config "$NOISE_TOML.tmp" "$NOISE_TOML"
 }
 
 # ---------- tvlid config nginx ----------
