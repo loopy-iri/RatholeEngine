@@ -48,5 +48,22 @@ jobs:
         run: |
           bash tests/test_node_config.sh
 
+      - name: adaptive probe + controller tests
+        run: |
+          bash tests/test_adaptive.sh
+
+      - name: hub allow-list + adaptive parser tests
+        run: |
+          cd "$(git rev-parse --show-toplevel)"
+          python3 -m unittest -v tests/test_hub.py
+
+      - name: release bundle + core-install tests
+        run: |
+          bash tests/test_release_bundle.sh
+
+      - name: release workflow structure assertions
+        run: |
+          bash tests/test_release_bundle.sh --workflow
+
       - name: verify pinned core patches
         run: bash tests/test_core_patch.sh

@@ -9,6 +9,28 @@ release.yml hamin bakhsh ra be onvan-e title/body-e GitHub Release montasher mik
 
 ## [Unreleased]
 
+## [1.5.0] - 2026-07-24
+
+### Added
+- **adaptive filtering (ratholenode):** `ratholenode adaptive on|off|status|test|run` — controller-e failover-e khodkar bein carrier-haye WS/KCP. probe-haye bounded `adaptive_probe_tcp`, `adaptive_probe_ws_tls`, `adaptive_probe_ws_plain`, `adaptive_probe_kcp` ba classification-e `dns_failed / tcp_timeout / tls_failed / ws_rejected / healthy` va khoruji JSON sanitize-shode (`/etc/rathole/adaptive-state.json`, mode 0600). threshold/hysteresis/cooldown ba `ADAPTIVE_FAILURES`, `ADAPTIVE_RECOVERIES`, `ADAPTIVE_COOLDOWN`. plain faghat ba `ALLOW_INSECURE=1` candidate mishavad. systemd timer/oneshot (`rathole-adaptive.service`, `rathole-adaptive.timer`).
+- **secret WebSocket control path (ratholectl/ratholenode):** masir-e control-e WebSocket az `/` be `/_rh/<32 hex>` montaqel shod. `ratholectl control-path show|rotate` + `ensure_control_path()`. nginx location-e dedicate baraye masir-e maghfi; masirha-ye namotabar fake/data behaviour ra hefz mikonand. `WS_PATH` dar `node.env` va `client.toml` (`path = "..."` bar asas-e patch-e core) zakhire mishavad.
+- **core-install.sh:** nasb-e binary-e patched ba verify-e SHA256SUMS + ejra-ye `--version` (barresi `0.5.1-ratholeengine.1`). `install-panel.sh` va `install-node.sh` avval core-install ra talash mikonand; fallback be download-e upstream.
+- **hub API (hub.py):** `build_node_cmd` action-haye `adaptive_on|off|status|test|run` ba ARGV-only (bedoon interpolation). `parse_adaptive_state()` JSON-e khoruji ra sanitize mikonad — tanha field-haye shenakhte-shode, hich secret leak nemikonad. `adaptive_on`/`adaptive_off`/`adaptive_run` be `WRITE_ACTIONS` ezafe shod.
+- **release workflow (release.yml):** do-stage build — `build-core` matrix (x86_64 + aarch64, `core/build.sh`) + artifact upload/download + `sha256sum` generation + `RATHOLE_REQUIRE_CORE=1` enforcement dar `package.sh` + publish.
+- **package.sh:** `RATHOLE_REQUIRE_CORE=1` hengami ke core binary-ha vojood nadarand fail mikonad; dar halat-e ensha-garan (developer) faqat warn mikonad.
+- **install-node.sh:** `--ws-path` argument; `WS_PATH` dar `node.env` zakhire mishavad.
+
+### Fixed
+- **rth_commit_config (common.sh):** hameye write-haye live config az طریق `flock -x` goozar mikonand ta reader ha file-e khali nabinad (inode hefz mishavad, hot-reload kamel ast).
+- **ratholenode gen_client:** agar services.conf khali bashad `[client.services]` table-e khali chap mishavad (config-e valid baraye rathole).
+
+### Tests
+- `tests/test_node_config.sh`: regression baraye config-e khali + `rth_commit_config` lock
+- `tests/test_nginx_control_path.sh`: barresi nginx routing baraye masir-e maghfi
+- `tests/test_adaptive.sh`: probe + controller threshold/cooldown/plain-guard
+- `tests/test_hub.py`: allow-list + injection prevention + `parse_adaptive_state`
+- `tests/test_release_bundle.sh`: core-install checksum, tamper rejection, workflow structure
+
 ## [1.4.8] - 2026-07-19
 
 ### Fixed

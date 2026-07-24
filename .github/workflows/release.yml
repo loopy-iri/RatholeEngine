@@ -1,20 +1,60 @@
 name: release
 
-# Sakht-e baste va upload be GitHub Release moghe-e push-e tag-e v* (masalan v1.0.0).
-# baste-ye tolid-shode haman chizi ast ke install.sh az releases/latest/download daryaft mikonad.
+# Sakht-e baste va upload be GitHub Release moghe-e push-e tag-e v* (masalan v1.5.0).
+# marhaleh 1: build-core — do runner (x86_64 va aarch64), core/build.sh, artifact upload.
+# marhaleh 2: build-release — download artifact-ha, SHA256SUMS, package.sh, publish.
 
 on:
   push:
     tags:
       - 'v*'
-  workflow_dispatch:   # emkan-e ejra-ye dasti az UI
+  workflow_dispatch:
 
 permissions:
-  contents: write       # baraye sakht-e release + upload asset
+  contents: write
 
 jobs:
+  # ---------- marhaleh 1: build-e core baraye har do architecture ----------
+  build-core:
+    name: build core (${{ matrix.target }})
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: true
+      matrix:
+        include:
+          - target: x86_64-unknown-linux-gnu
+            runner: ubuntu-latest
+          - target: aarch64-unknown-linux-musl
+            runner: ubuntu-24.04-arm
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Rust + cross-compile tools
+        run: |
+          curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --default-toolchain stable --no-modify-path
+          echo "$HOME/.cargo/bin" >> "$GITHUB_PATH"
+          rustup target add ${{ matrix.target }}
+          sudo apt-get update -y
+          sudo apt-get install -y build-essential musl-tools libssl-dev pkg-config
+
+      - name: Build core binary
+        run: |
+          mkdir -p /tmp/core-out
+          bash core/build.sh ${{ matrix.target }} /tmp/core-out
+
+      - name: Upload core artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: core-${{ matrix.target }}
+          path: /tmp/core-out/rathole
+          if-no-files-found: error
+
+  # ---------- marhaleh 2: package va publish release ----------
   build-release:
+    name: package and release
     runs-on: ubuntu-latest
+    needs: build-core
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -22,22 +62,44 @@ jobs:
       - name: Install packaging tools
         run: sudo apt-get update -y && sudo apt-get install -y zip
 
+      - name: Download core (x86_64)
+        uses: actions/download-artifact@v4
+        with:
+          name: core-x86_64-unknown-linux-gnu
+          path: rathole-manager/core/x86_64-unknown-linux-gnu/
+
+      - name: Download core (aarch64)
+        uses: actions/download-artifact@v4
+        with:
+          name: core-aarch64-unknown-linux-musl
+          path: rathole-manager/core/aarch64-unknown-linux-musl/
+
+      - name: Make binaries executable
+        run: chmod +x rathole-manager/core/*/rathole
+
+      - name: Generate SHA256SUMS
+        run: |
+          cd rathole-manager/core
+          sha256sum x86_64-unknown-linux-gnu/rathole aarch64-unknown-linux-musl/rathole > SHA256SUMS
+          cat SHA256SUMS
+
+      - name: Verify checksums
+        run: |
+          cd rathole-manager/core
+          sha256sum -c SHA256SUMS --strict
+
       - name: Build bundle (package.sh)
-        run: bash package.sh
+        run: RATHOLE_REQUIRE_CORE=1 bash package.sh
 
       - name: Collect release assets
         run: |
           mkdir -p dist
-          # baste (zip yekhali ya tar.gz fallback)
           [ -f rathole-manager.zip ]    && cp rathole-manager.zip dist/
           [ -f rathole-manager.tar.gz ] && cp rathole-manager.tar.gz dist/
-          # nصab-konande-ha ke install.sh be onha niaz darad
           cp bootstrap.sh dist/
           cp install.sh dist/
           ls -lh dist/
 
-      # note-haye release az CHANGELOG.md: bakhsh-e hamin tag (## [X.Y.Z]) estekhraj mishavad.
-      # agar bakhsh-e tag dar CHANGELOG nabashad, be note-haye khodkar-e GitHub bargasht mikonim.
       - name: Extract release notes from CHANGELOG.md
         id: notes
         run: |
@@ -77,5 +139,4 @@ jobs:
             dist/bootstrap.sh
             dist/install.sh
           fail_on_unmatched_files: false
-          # agar CHANGELOG bakhsh-e in tag ra nadasht, GitHub khodesh note misazad
           generate_release_notes: ${{ steps.notes.outputs.found != '1' }}

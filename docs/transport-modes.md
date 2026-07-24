@@ -54,3 +54,31 @@
 ---
 
 **نکته‌ی کلیدی:** در حالت‌های ۱ تا ۴، سرویس‌ها/توکن‌ها/مسیر کاربران دست‌نخورده می‌مانند؛ فقط حاملِ تونل عوض می‌شود. برای جزئیات مسیر بسته لایه‌به‌لایه: [`traffic-flow.md`](traffic-flow.md).
+
+---
+
+## ۷) adaptive failover (v1.5.0+)
+
+> یک لایه‌ی **خودکار** بالای حالت‌های ۱–۴. حاملِ فعال را بدون دخالت اپراتور عوض می‌کند.
+
+- **probe‌های bounded:** هر بازه (پیش‌فرض ۳۰ ثانیه) یک WebSocket RFC 6455 به `WS_PATH` می‌فرستد؛ طبقه‌بندی مستقیم:
+  `dns_failed` → `tcp_timeout` → `tls_failed` → `ws_rejected` → `ws_timeout` → `healthy`
+- **threshold/hysteresis:** پس از `ADAPTIVE_FAILURES` (پیش‌فرض ۳) شکست متوالی سوییچ؛ پس از `ADAPTIVE_RECOVERIES` (پیش‌فرض ۵) بازگشت سالم + اتمام cooldown.
+- **cooldown:** `ADAPTIVE_COOLDOWN` (پیش‌فرض ۳۰۰ ثانیه) بین سوییچ‌های متوالی.
+- **حامل‌های اولویت‌دار:** `ws` → `kcp` (و در صورت `ALLOW_INSECURE=1`: `plain`). plain هرگز بدون اجازه‌ی صریح انتخاب نمی‌شود.
+- **rollback خودکار:** اگر probe پس از سوییچ هم fail باشد، config قبلی بازیابی می‌شود.
+- **state sanitize:** `/etc/rathole/adaptive-state.json` (mode 0600) فقط فیلدهای `time`, `current`, `classification`, `latency_ms`, `consecutive_failures` دارد — هیچ token/key/WS_PATH در JSON نیست.
+- روشن‌کردن: `ratholenode adaptive on [--interval N] [--failures N] [--recoveries N]`، خاموش: `off`، وضعیت: `status`، تست: `test [--json]`.
+
+## ۸) secret WebSocket control path (v1.5.0+)
+
+> مسیر WebSocket کنترلی rathole از `/` به `/_rh/<32 hex>` منتقل شد تا DPI نتواند آن را از سایت فیک تشخیص دهد.
+
+- **nginx:** فقط `location = /_rh/<secret>` از `$http_upgrade` به control port می‌رود؛ همه‌ی مسیرهای دیگر رفتار fake/data خود را حفظ می‌کنند.
+- **مدیریت:** `ratholectl control-path show` نشان‌دهنده، `rotate` مسیر جدید می‌سازد و grace period برای به‌روزرسانی نودها فراهم می‌کند.
+- **نود:** `WS_PATH` در `node.env` ذخیره می‌شود و در `client.toml` به‌عنوان `path = "/_rh/..."` درج می‌شود (patch‌ی از core روی `WebsocketConfig.path`).
+- **نمایش:** `cmd_show` مقدار `WS_PATH=<masked>` چاپ می‌کند — هیچ secret کامل در لاگ پدیدار نمی‌شود.
+
+---
+
+**نکته‌ی کلیدی:** در حالت‌های ۱ تا ۴، سرویس‌ها/توکن‌ها/مسیر کاربران دست‌نخورده می‌مانند؛ فقط حاملِ تونل عوض می‌شود. برای جزئیات مسیر بسته لایه‌به‌لایه: [`traffic-flow.md`](traffic-flow.md).

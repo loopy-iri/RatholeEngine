@@ -10,6 +10,22 @@ SRC="rathole-manager"
 OUT="rathole-manager.zip"
 [ -d "$SRC" ] || { echo "pvshh $SRC peyda nashod."; exit 1; }
 
+# barresi core binary: agar RATHOLE_REQUIRE_CORE=1 bashad va binary-ha vojood nadashtand → fail
+RATHOLE_REQUIRE_CORE="${RATHOLE_REQUIRE_CORE:-0}"
+CORE_OK=0
+if [ -f "$SRC/core/SHA256SUMS" ] && \
+   [ -f "$SRC/core/x86_64-unknown-linux-gnu/rathole" ] && \
+   [ -f "$SRC/core/aarch64-unknown-linux-musl/rathole" ]; then
+  CORE_OK=1
+fi
+if [ "$RATHOLE_REQUIRE_CORE" = "1" ] && [ "$CORE_OK" -eq 0 ]; then
+  echo "[!] RATHOLE_REQUIRE_CORE=1 set shode vali core binary-ha dar rathole-manager/core/ peyda nashod."
+  echo "    avval core/build.sh ra ejra kon ya az workflow artifact download kon."
+  exit 1
+elif [ "$CORE_OK" -eq 0 ]; then
+  echo "[*] core binary-ha dar bundle nistnd (baraye release az RATHOLE_REQUIRE_CORE=1 estefade kon)."
+fi
+
 # pvshh-ye mstndat (docs/) ham dar baste gonjande mishavad agar vojood dashte bashad.
 DOCS="docs"
 PACK=("$SRC")
