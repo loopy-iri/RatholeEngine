@@ -533,6 +533,17 @@ def build_node_cmd(action, a):
         uid = a.get("id", "")
         if not RE_ID.match(uid): return None
         return ["ratholenode", "upstream", "rm", uid]
+    # ---- adaptive filtering (Task 8) ----
+    if action == "adaptive_off":    return ["ratholenode", "adaptive", "off"]
+    if action == "adaptive_status": return ["ratholenode", "adaptive", "status"]
+    if action == "adaptive_test":   return ["ratholenode", "adaptive", "test", "--json"]
+    if action == "adaptive_run":    return ["ratholenode", "adaptive", "run"]
+    if action == "adaptive_on":
+        iv = str(a.get("interval", "30") or "30")
+        fa = str(a.get("failures",  "3")  or "3")
+        re = str(a.get("recoveries","5")  or "5")
+        if not RE_PORT.match(iv) or not RE_PORT.match(fa) or not RE_PORT.match(re): return None
+        return ["ratholenode", "adaptive", "on", "--interval", iv, "--failures", fa, "--recoveries", re]
     return None
 
 
@@ -553,6 +564,7 @@ WRITE_ACTIONS = {
     "upstream_kcp_on", "upstream_kcp_off", "upstream_apply", "upstream_restart",
 
     "watchdog_on", "watchdog_off", "migrate", "deploy",
+    "adaptive_on", "adaptive_off", "adaptive_run",
 
 }
 
@@ -983,6 +995,31 @@ def parse_node_ls(text):
         if len(p) >= 2 and p[1].isdigit():
             svcs.append({"name": p[0], "inbound": p[1]})
     return {"server": server, "services": svcs}
+
+# ---- parse-e khoruji JSON-e adaptive state (bedoon-e secret-ha) ----
+# faqat field-haye motalab-e shenakhte-shode ra bar-migardanad.
+_ADAPTIVE_ALLOWED_KEYS = frozenset({
+    "time", "current", "classification", "latency_ms", "consecutive_failures",
+})
+_ADAPTIVE_SECRET_KEYS = frozenset({"WS_PATH", "token", "key", "control_path", "noise_privkey"})
+
+def parse_adaptive_state(raw):
+    """raw: string ya dict. -> dict ba field-haye motabar ya {'classification':'unknown'}."""
+    import json as _json
+    try:
+        if isinstance(raw, str):
+            d = _json.loads(raw)
+        elif isinstance(raw, dict):
+            d = raw
+        else:
+            return {"classification": "unknown"}
+        # tanha field-haye motalab-e shenakhte-shode ra bar-migardanad
+        result = {k: v for k, v in d.items() if k in _ADAPTIVE_ALLOWED_KEYS}
+        if "classification" not in result:
+            result["classification"] = "unknown"
+        return result
+    except Exception:
+        return {"classification": "unknown"}
 
 def parse_upstream_ls(text):
     main = None; ups = []; cur = None
