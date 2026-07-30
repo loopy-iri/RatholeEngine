@@ -150,6 +150,7 @@ def build_iran_cmd(action, a):
         return ["ratholectl", "noise", "node", name, ("on" if action == "noise_node_on" else "off")]
     # ---- backhaul: core-e SMUX-e joda posht-e nginx/443 (tak-port hefz mishavad) ----
     if action == "backhaul_status": return ["ratholectl", "backhaul", "status"]
+    if action == "backhaul_logs":   return ["ratholectl", "backhaul", "logs"]
     if action == "backhaul_show":   return ["ratholectl", "backhaul", "show"]
     if action == "backhaul_off":    return ["ratholectl", "backhaul", "off"]
     if action == "backhaul_on":
@@ -295,6 +296,7 @@ def build_node_cmd(action, a):
         return cmd
     # ---- backhaul: client-e SMUX ke be domain/443 (nginx → backhaul-server) vasl mishavad ----
     if action == "backhaul_status": return ["ratholenode", "backhaul", "status"]
+    if action == "backhaul_logs":   return ["ratholenode", "backhaul", "logs"]
     if action == "backhaul_off":    return ["ratholenode", "backhaul", "off"]
     if action == "backhaul_on":
         domain    = a.get("domain", "")
@@ -327,6 +329,42 @@ def build_node_cmd(action, a):
         uid = a.get("id", "")
         if not RE_ID.match(uid): return None
         return ["ratholenode", "upstream", "kcp", uid, "status"]
+    # read-only: ayb-yabi-ye upstream (NA dar WRITE_ACTIONS)
+    if action == "upstream_logs":
+        uid = a.get("id", "")
+        if not RE_ID.match(uid): return None
+        return ["ratholenode", "upstream", "logs", uid]
+    if action == "upstream_status":
+        uid = a.get("id", "")
+        if not RE_ID.match(uid): return None
+        return ["ratholenode", "upstream", "status", uid]
+    # ---- hamel-e per-upstream: hamsan-e tunnel-e asli vali baraye har upstream joda ----
+    if action == "upstream_plain_on":
+        uid = a.get("id", ""); remote = a.get("remote", "")
+        if not RE_ID.match(uid) or not RE_IPPORT.match(remote): return None
+        return ["ratholenode", "upstream", "plain", uid, "on", remote]
+    if action == "upstream_plain_off":
+        uid = a.get("id", "")
+        if not RE_ID.match(uid): return None
+        return ["ratholenode", "upstream", "plain", uid, "off"]
+    if action == "upstream_noise_on":
+        uid = a.get("id", ""); remote = a.get("remote", ""); pubkey = a.get("pubkey", "")
+        if not RE_ID.match(uid) or not RE_IPPORT.match(remote): return None
+        if not RE_B64.match(pubkey): return None
+        cmd = ["ratholenode", "upstream", "noise", uid, "on", remote, pubkey]
+        pattern = a.get("pattern", "")
+        if pattern:
+            if not RE_HOST.match(pattern): return None
+            cmd.append(pattern)
+        return cmd
+    if action == "upstream_noise_off":
+        uid = a.get("id", "")
+        if not RE_ID.match(uid): return None
+        return ["ratholenode", "upstream", "noise", uid, "off"]
+    if action == "upstream_ws":
+        uid = a.get("id", "")
+        if not RE_ID.match(uid): return None
+        return ["ratholenode", "upstream", "ws", uid]
     if action == "upstream_apply":
         uid = a.get("id", "")
         if not RE_ID.match(uid): return None
@@ -412,6 +450,8 @@ WRITE_ACTIONS = {
     "add_svc", "rm_svc", "kcp_on", "kcp_off", "apply", "restart", "set_server",
     "upstream_add", "upstream_add_svc", "upstream_rm", "upstream_rm_svc",
     "upstream_kcp_on", "upstream_kcp_off", "upstream_apply", "upstream_restart",
+    "upstream_plain_on", "upstream_plain_off",
+    "upstream_noise_on", "upstream_noise_off", "upstream_ws",
 
     "watchdog_on", "watchdog_off", "migrate", "deploy",
     "adaptive_on", "adaptive_off", "adaptive_run",

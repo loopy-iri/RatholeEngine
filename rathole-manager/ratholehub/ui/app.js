@@ -307,6 +307,8 @@ function renderIran(n,ov){
    <button class="g" onclick="bhOnIran('${n}')">${t('bh_on')}</button>
    <button class="r" onclick="run('${n}','backhaul_off')">${t('bh_off')}</button>
    <button class="gh" onclick="run('${n}','backhaul_show')">${t('show_key')}</button>
+   <button class="gh" onclick="run('${n}','backhaul_status')">${t('status')}</button>
+   <button class="gh" onclick="run('${n}','backhaul_logs')">${t('logs')}</button>
    <button class="s" onclick="bhNode('${n}','on')">${t('bh_node_on')}</button>
    <button class="s" onclick="bhNode('${n}','off')">${t('bh_node_off')}</button></div>
    <div class="btns" style="margin-top:10px">
@@ -403,6 +405,9 @@ function renderNode(n,ov){
  s+=`<div class="sec"><h4>${t('main_tunnel')} ${esc(ov.main_server||'?')} <button class="g" onclick="setMainSrv('${n}')">${t('set_main')}</button></h4>
    <div class="btns"><span class="sub">${t('carrier')}</span>${carrierSelect(n,ov)}
    <button class="s" onclick="run('${n}','restart')">${t('restart_tunnel')}</button>
+   <button class="gh" onclick="run('${n}','logs')">${t('logs')}</button>
+   <button class="gh" onclick="run('${n}','backhaul_status')">backhaul ${t('status')}</button>
+   <button class="gh" onclick="run('${n}','backhaul_logs')">${t('bh_logs')}</button>
    <button class="gh" onclick="run('${n}','migrate')">${t('migrate')}</button></div>
    <div class="sub" style="margin-top:4px">${h(t('carrier_hint'))}</div>
    <div class="btns" style="margin-top:6px"><span class="sub">${t('watchdog')}</span>
@@ -422,17 +427,19 @@ function renderNode(n,ov){
    <td class="btns"><button class="r" onclick="rmSvc('${n}','${esc(d.name)}')">${t('remove')}</button></td></tr>`;});
   s+='</table>';}
  s+='</div>';
- s+=`<div class="sec"><h4>${t('upstreams')} <button class="g" onclick="upAdd('${n}')">${t('add_up')}</button></h4>`;
+ s+=`<div class="sec"><h4>${t('upstreams')} <button class="g" onclick="upAdd('${n}')">${t('add_up')}</button></h4>
+   <div class="sub" style="margin-bottom:6px">${h(t('upcarrier_hint'))}</div>`;
  const ups=ov.upstreams||[];
  if(!ups.length)s+=`<div class="empty">${t('no_up')}</div>`;
  ups.forEach(u=>{
-  const kb=u.tunnel==='kcp'?'<span class="badge b-kcp">kcp</span>':'<span class="badge b-ws">ws</span>';
+  // badge az hamon manba-e vahed-e mode (mesl-e tunnel-e asli) — daghigh va hamrang.
+  const kb=modeBadge(upCarrier(u));
   s+=`<div class="up"><div class="btns" style="align-items:center">
    <b>${esc(u.id)}</b> ${kb} <span class="sub">→ ${esc(u.server)}</span><span style="flex:1"></span>
-   <button class="g" onclick="upKcpOn('${n}','${esc(u.id)}')">${t('kcp_on')}</button>
-   <button class="r" onclick="run('${n}','upstream_kcp_off',{id:'${esc(u.id)}'})">${t('kcp_off')}</button>
+   <span class="sub">${t('carrier')}</span>${upCarrierSelect(n,u)}
    <button class="s" onclick="run('${n}','upstream_restart',{id:'${esc(u.id)}'})">restart</button>
-   <button class="gh" onclick="run('${n}','upstream_kcp_status',{id:'${esc(u.id)}'})">${t('status')}</button>
+   <button class="gh" onclick="run('${n}','upstream_status',{id:'${esc(u.id)}'})">${t('status')}</button>
+   <button class="gh" onclick="run('${n}','upstream_logs',{id:'${esc(u.id)}'})">${t('logs')}</button>
    <button class="g" onclick="upAddSvc('${n}','${esc(u.id)}')">${t('add_svc')}</button>
    <button class="r" onclick="upRm('${n}','${esc(u.id)}')">${t('del_up')}</button></div>`;
   if((u.services||[]).length){s+=tbl([t('c_svc'),t('c_inbound'),t('c_ops')]);u.services.forEach(x=>{s+=`<tr><td>${svcDot(x.name)}${esc(x.name)}</td><td>${esc(x.inbound)}</td>
@@ -1237,6 +1244,52 @@ function setCarrier(n,next,cur){
 function carrierOffAction(cur){
  return ({kcp:'kcp_off',plain:'plain_off',noise:'noise_off',backhaul:'backhaul_off'})[cur]||'kcp_off';
 }
+
+// ============ HAMEL-e per-UPSTREAM (mesl-e tunnel-e asli, vali baraye har upstream) ============
+// har upstream yek server-e Iran-e mostaghel ast va TUNNEL-e khodash ra dar up_env darad،
+// pas daghighan mesl-e tunnel-e asli ENHESARI ast: yek select، na chand dokme.
+// backhaul inja NIST — backhaul yek core-e joda-ye 1:1 ast (yek token/yek ports baraye kol-e
+// server-e Iran) va per-upstream mani nemidahad.
+const UP_CARRIERS=['ws','kcp','plain','noise'];
+
+function upCarrier(u){
+ const c=((u||{}).tunnel||'ws');
+ return UP_CARRIERS.indexOf(c)>=0?c:'ws';
+}
+function upCarrierSelect(n,u){
+ const cur=upCarrier(u), id='upcar_'+n+'__'+u.id;
+ const opts=UP_CARRIERS.map(c=>`<option value="${c}"${c===cur?' selected':''}>${h(t('carrier_'+c))}</option>`).join('');
+ return `<select id="${id}" title="${h(t('carrier'))}" onchange="setUpCarrier('${n}','${esc(u.id)}',this.value,'${cur}')">${opts}</select>`;
+}
+// avaz kardan-e hamel-e yek upstream. har halat form/parametr-e khodash ra darad؛
+// 'ws' bazgasht be pishfarz ast va har hamel-e digar ra khamoosh mikonad.
+function setUpCarrier(n,id,next,cur){
+ if(next===cur)return;
+ const sel=$('upcar_'+n+'__'+id);
+ const revert=()=>{if(sel)sel.value=cur;};
+ if(!confirm(t('upcarrier_confirm').replace('%s',t('carrier_'+next)).replace('%n',id))){revert();return;}
+ switch(next){
+   case 'ws':    run(n,'upstream_ws',{id}); break;
+   case 'kcp':   upKcpOn(n,id); break;
+   case 'plain': upPlainOn(n,id); break;
+   case 'noise': upNoiseOn(n,id); break;
+   default: revert();
+ }
+}
+// plain baraye upstream: faghat adres-e HTTP-e sade-ye an server-e Iran lazem ast.
+function upPlainOn(n,id){formModal(t('t_plain_node')+' ('+id+')',[
+  {id:'remote',label:t('l_plain_remote'),ph:'5.202.4.40:8880',req:1}],
+  v=>{closeModal();run(n,'upstream_plain_on',{id,remote:v.remote});});}
+// noise baraye upstream: hamon field-ha va autofill-e tunnel-e asli.
+function upNoiseOn(n,id){formModal(t('t_noise_node')+' ('+id+')',noiseNodeFields(),
+  v=>{closeModal();run(n,'upstream_noise_on',{id,remote:v.remote,pubkey:v.pubkey,pattern:v.pattern||''});});
+ const sel=$('f_iran');
+ if(sel){sel.onchange=()=>noiseAutofill(sel.value);
+   const box=sel.closest('.row');
+   if(box){const b=document.createElement('button');b.className='s';b.textContent='↻';
+     b.title=t('l_autofill');b.onclick=e=>{e.preventDefault();noiseAutofill(sel.value);};box.appendChild(b);}
+   noiseAutofill(sel.value);
+ }}
 
 // ============ MODE-e per-node SAMT-e IRAN (select mesl-e node) ============
 // rooye Iran faghat noise/backhaul PER-NODE hastand (har node .transport-e khodash ra

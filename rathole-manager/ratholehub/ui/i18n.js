@@ -71,6 +71,9 @@ const DICT={
   adaptive_mode:'adaptive (swich khodkar):',adaptive_on:'on',adaptive_off:'off',adaptive_status:'vaziat',adaptive_test:'test eybyabi',
   svc_tunnel:'servicehaye in tunnel',add_svc:'+ service',no_svc:'servisi nist.',c_svc:'service',
   upstreams:'serverhaye Iran-e digar (upstream)',add_up:'+ upstream',no_up:'upstream nadari (faghat yek Iran).',status:'status',del_up:'hazf upstream',cf_delup:'hazf upstream',cf_delupsvc:'hazf service az upstream',
+  logs:'log',bh_logs:'log-e backhaul',
+  upcarrier_confirm:'hamel-e upstream «%n» be %s taghir konad? (samt-e an server-e Iran ham bayad hamin hamel faal bashad)',
+  upcarrier_hint:'har upstream yek server-e Iran-e mostaghel ast — hamel-e khodash ra darad (mesl-e tunnel-e asli).',
 
   cancel:'enseraf',save:'zakhire',fill:'hameye field haye lazem ra por kon',saved:'zakhire shod ✓',
   cf_delsrv:'hazf server az panel?',cf_delnode:'hazf node',cf_delsvc:'hazf service',cf_deploy:'apdit az GitHub (akharin Release) rooye',
@@ -214,6 +217,9 @@ const DICT={
   adaptive_mode:'adaptive failover:',adaptive_on:'Adaptive On',adaptive_off:'Off',adaptive_status:'Status',adaptive_test:'Test Probes',
   svc_tunnel:'Services on this tunnel',add_svc:'+ service',no_svc:'No services.',c_svc:'Service',
   upstreams:'Other Iran servers (upstream)',add_up:'+ upstream',no_up:'No upstream (single Iran).',status:'status',del_up:'Remove upstream',cf_delup:'Remove upstream',cf_delupsvc:'Remove service from upstream',
+  logs:'logs',bh_logs:'backhaul logs',
+  upcarrier_confirm:'Switch upstream "%n" carrier to %s? (that Iran server must have the same carrier enabled)',
+  upcarrier_hint:'Each upstream is an independent Iran server — it has its own carrier (like the main tunnel).',
 
   cancel:'Cancel',save:'Save',fill:'Fill all required fields',saved:'Saved ✓',
   cf_delsrv:'Remove server from panel?',cf_delnode:'Remove node',cf_delsvc:'Remove service',cf_deploy:'Update from GitHub (latest Release) on',

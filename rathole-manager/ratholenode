@@ -568,7 +568,10 @@ cmd_backhaul(){
         echo "backhaul client: $(c_y 'inactive')"
       fi
       ;;
-    *) die "estefade: ratholenode backhaul <on <domain> <token> [transport] [profile]|off|status>" ;;
+    logs)
+      journalctl -u "$BH_CLI_SVC" -n "${1:-40}" --no-pager 2>/dev/null || true
+      ;;
+    *) die "estefade: ratholenode backhaul <on <domain> <token> [transport] [profile]|off|status|logs>" ;;
   esac
 }
 
@@ -814,11 +817,68 @@ up_kcp_status(){ # $1=id
   local id="$1" t
   t="$(grep -oE '^TUNNEL=.*' "$(up_env "$id")" 2>/dev/null | cut -d= -f2)"; t="${t:-ws}"
   echo "upstream '$id' halat tunnel: $(c_y "$t")"
-  if [ "$t" = "kcp" ]; then
-    echo "  local: $(grep -oE '^KCP_LOCAL=.*' "$(up_env "$id")" | cut -d= -f2)   remote(UDP): $(grep -oE '^KCP_REMOTE=.*' "$(up_env "$id")" | cut -d= -f2)   profile: $(grep -oE '^KCP_PROFILE=.*' "$(up_env "$id")" | cut -d= -f2)"
-    systemctl is-active --quiet "rathole-kcp-up-${id}" && echo "  kcp-client: $(c_g 'active')" || echo "  kcp-client: $(c_r 'inactive')"
-  fi
+  case "$t" in
+    kcp)
+      echo "  local: $(grep -oE '^KCP_LOCAL=.*' "$(up_env "$id")" | cut -d= -f2)   remote(UDP): $(grep -oE '^KCP_REMOTE=.*' "$(up_env "$id")" | cut -d= -f2)   profile: $(grep -oE '^KCP_PROFILE=.*' "$(up_env "$id")" | cut -d= -f2)"
+      systemctl is-active --quiet "rathole-kcp-up-${id}" && echo "  kcp-client: $(c_g 'active')" || echo "  kcp-client: $(c_r 'inactive')"
+      ;;
+    plain) echo "  remote(plain, bedoon TLS): $(grep -oE '^PLAIN_REMOTE=.*' "$(up_env "$id")" 2>/dev/null | cut -d= -f2)" ;;
+    noise) echo "  remote(noise): $(grep -oE '^NOISE_REMOTE=.*' "$(up_env "$id")" 2>/dev/null | cut -d= -f2)   pattern: $(grep -oE '^NOISE_PATTERN=.*' "$(up_env "$id")" 2>/dev/null | cut -d= -f2)" ;;
+    *)     echo "  remote(ws+TLS): $(grep -oE '^SERVER=.*' "$(up_env "$id")" 2>/dev/null | cut -d= -f2-)" ;;
+  esac
   systemctl is-active --quiet "rathole-client@${id}" && echo "  rathole-client@${id}: $(c_g 'active')" || echo "  rathole-client@${id}: $(c_r 'inactive')"
+}
+
+# ---------- plain/noise baraye upstream (hamsan-e tunnel-e asli, vali per-upstream) ----------
+# gen_up_client az ghabl har 4 halat (ws|kcp|plain|noise) ra mishenasad — inja faghat
+# TUNNEL-e hamon upstream ra set/pak mikonim va dobare misazim.
+up_plain_on(){ # $1=id $2=remote(host:port)
+  local id="$1" remote="$2"
+  [ -n "$remote" ] || die "estefade: ratholenode upstream plain <id> on <iran_host:port>"
+  echo "$remote" | grep -qE '^[A-Za-z0-9_.-]+:[0-9]+$' || die "adres bayad HOST:PORT bashad."
+  # kcp-e in upstream (agar bood) bayad khamoosh shavad — har upstream YEK hamel darad.
+  systemctl disable --now "rathole-kcp-up-${id}" 2>/dev/null || true
+  rm -f "$(up_kcp_unit "$id")"; systemctl daemon-reload 2>/dev/null || true
+  kv_set "$(up_env "$id")" TUNNEL plain
+  kv_set "$(up_env "$id")" PLAIN_REMOTE "$remote"
+  up_restart "$id"
+  log "upstream '$id' be halat plain (websocket bedoon TLS → $remote) switch shod."
+}
+
+up_noise_on(){ # $1=id $2=remote(host:port) $3=pubkey [pattern]
+  local id="$1" remote="$2" pubkey="$3" pattern="${4:-}"
+  [ -n "$remote" ] && [ -n "$pubkey" ] || die "estefade: ratholenode upstream noise <id> on <iran_host:port> <pubkey> [pattern]"
+  echo "$remote" | grep -qE '^[A-Za-z0-9_.-]+:[0-9]+$' || die "adres bayad HOST:PORT bashad."
+  echo "$pubkey" | grep -qE '^[A-Za-z0-9+/=]{40,64}$' || die "pubkey-e noise namotabar (base64)."
+  systemctl disable --now "rathole-kcp-up-${id}" 2>/dev/null || true
+  rm -f "$(up_kcp_unit "$id")"; systemctl daemon-reload 2>/dev/null || true
+  kv_set "$(up_env "$id")" TUNNEL noise
+  kv_set "$(up_env "$id")" NOISE_REMOTE "$remote"
+  kv_set "$(up_env "$id")" NOISE_PUBKEY "$pubkey"
+  [ -n "$pattern" ] && kv_set "$(up_env "$id")" NOISE_PATTERN "$pattern"
+  up_restart "$id"
+  log "upstream '$id' be halat noise (ramznegari-shode → $remote) switch shod."
+}
+
+# bargasht be ws/443 az HAR halati (plain/noise/kcp).
+up_ws_on(){ # $1=id
+  local id="$1"
+  systemctl disable --now "rathole-kcp-up-${id}" 2>/dev/null || true
+  rm -f "$(up_kcp_unit "$id")"; systemctl daemon-reload 2>/dev/null || true
+  kv_set "$(up_env "$id")" TUNNEL ws
+  up_restart "$id"
+  log "upstream '$id' be websocket/443 (pishfarz) bargasht."
+}
+
+# log-e yek upstream: ham rathole-client@<id> ham (agar bashad) kcp-up-<id>.
+up_logs(){ # $1=id [n]
+  local id="$1" n="${2:-40}"
+  echo "$(c_g "== rathole-client@${id} ==")"
+  journalctl -u "rathole-client@${id}" -n "$n" --no-pager 2>/dev/null || true
+  if [ -f "$(up_kcp_unit "$id")" ]; then
+    echo; echo "$(c_g "== rathole-kcp-up-${id} ==")"
+    journalctl -u "rathole-kcp-up-${id}" -n "$n" --no-pager 2>/dev/null || true
+  fi
 }
 
 # hot-reload upstream (baraye taghir srvisha; bedoon ghati)
@@ -903,6 +963,40 @@ cmd_upstream(){
         status) up_kcp_status "$id" ;;
         *) die "estefade: ratholenode upstream kcp <id> <on <ip:port> <key> [profile]|off|status>" ;;
       esac ;;
+    plain)
+      local id="${1:-}"; shift || true
+      local act="${1:-status}"; shift || true
+      [ -n "$id" ] || die "estefade: ratholenode upstream plain <id> <on <host:port>|off|status>"
+      [ -f "$(up_env "$id")" ] || die "upstream '$id' nist (aval: ratholenode upstream add $id <server>)."
+      case "$act" in
+        on)     up_plain_on "$id" "${1:-}" ;;
+        off)    up_ws_on "$id" ;;
+        status) up_kcp_status "$id" ;;
+        *) die "estefade: ratholenode upstream plain <id> <on <host:port>|off|status>" ;;
+      esac ;;
+    noise)
+      local id="${1:-}"; shift || true
+      local act="${1:-status}"; shift || true
+      [ -n "$id" ] || die "estefade: ratholenode upstream noise <id> <on <host:port> <pubkey> [pattern]|off|status>"
+      [ -f "$(up_env "$id")" ] || die "upstream '$id' nist (aval: ratholenode upstream add $id <server>)."
+      case "$act" in
+        on)     up_noise_on "$id" "${1:-}" "${2:-}" "${3:-}" ;;
+        off)    up_ws_on "$id" ;;
+        status) up_kcp_status "$id" ;;
+        *) die "estefade: ratholenode upstream noise <id> <on <host:port> <pubkey> [pattern]|off|status>" ;;
+      esac ;;
+    ws)
+      local id="${1:-}"; [ -n "$id" ] || die "estefade: ratholenode upstream ws <id>"
+      [ -f "$(up_env "$id")" ] || die "upstream '$id' nist."
+      up_ws_on "$id" ;;
+    status)
+      local id="${1:-}"; [ -n "$id" ] || die "estefade: ratholenode upstream status <id>"
+      [ -f "$(up_env "$id")" ] || die "upstream '$id' nist."
+      up_kcp_status "$id" ;;
+    logs)
+      local id="${1:-}"; [ -n "$id" ] || die "estefade: ratholenode upstream logs <id> [n]"
+      [ -f "$(up_env "$id")" ] || die "upstream '$id' nist."
+      up_logs "$id" "${2:-40}" ;;
     ls)
       local mt; mt="$(grep -oE '^TUNNEL=.*' "$ENV_FILE" 2>/dev/null | cut -d= -f2)"; mt="${mt:-ws}"
       echo "$(c_g 'tunnel asli (main):') $(grep -E '^SERVER=' "$ENV_FILE" 2>/dev/null | cut -d= -f2-)  [tunnel=$mt]"
@@ -914,7 +1008,7 @@ cmd_upstream(){
         echo "$(c_g "upstream '$id':") $(grep -E '^SERVER=' "$e" | cut -d= -f2-)  [tunnel=$t]"
         [ -f "$(up_svc "$id")" ] && sed -E 's/\|[^|]*\|/|***|/' "$(up_svc "$id")" | sed 's/^/    /'
       done ;;
-    *) die "estefade: ratholenode upstream <add|add-svc|rm-svc|rm|apply|kcp|ls> ..." ;;
+    *) die "estefade: ratholenode upstream <add|add-svc|rm-svc|rm|apply|restart|kcp|plain|noise|ws|status|logs|ls> ..." ;;
   esac
 }
 
@@ -1158,8 +1252,13 @@ ratholenode — mdirit klaint rathole (chnd service rooye yek tunnel)
 
   fakeweb <start|stop|rm> [port] web fik sabok baraye fallback inbound TLS (pishfarz 8081)
   upstream add <id> <server:port> [host]      afzoodan server Iran dovom/sevom (tunnel jda)
-  upstream add-svc <id> <name> <token> <inbound> | rm-svc | rm | apply | ls
+  upstream add-svc <id> <name> <token> <inbound> | rm-svc | rm | apply | restart | ls
   upstream kcp <id> on <ip:port> <key> [profile] | off | status   kcp baraye an server Iran
+  upstream plain <id> on <host:port> | off       websocket bedoon TLS baraye an upstream
+  upstream noise <id> on <host:port> <pubkey> [pattern] | off   noise baraye an upstream
+  upstream ws <id>               bargasht-e an upstream be websocket/443 (pishfarz)
+  upstream status <id>           halat-e tunnel + vaziat-e service-haye an upstream
+  upstream logs <id> [n]         log-e rathole-client@<id> (+ kcp-up agar bashad)
   migrate                        naghshe-ye mohajerat hame tunnelha (main + upstreamha) be kcp
   watchdog <on [interval]|off|status>   restart khodkar tunnel gir-karde/ghat-shode
   backup [file] | restore <file>   backup/restore tanzimat node

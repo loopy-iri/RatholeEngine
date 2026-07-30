@@ -9,6 +9,27 @@ release.yml hamin bakhsh ra be onvan-e title/body-e GitHub Release montasher mik
 
 ## [Unreleased]
 
+### Added
+- **hamel-e per-upstream (parity ba tunnel-e asli):** har upstream hala `ws|kcp|plain|noise`-e
+  khodash ra darad — `ratholenode upstream <plain|noise|ws> <id> ...` + select dar hub (mesl-e
+  select-e tunnel-e asli). `gen_up_client` az ghabl in halat-ha ra mishenakht؛ dastur/UI-yash nabood.
+- **didan-e log/status-e upstream:** `ratholenode upstream logs <id> [n]` (ham `rathole-client@<id>`
+  ham `rathole-kcp-up-<id>`) va `ratholenode upstream status <id>` + dokme dar hub.
+- **log-e backhaul:** `ratholectl backhaul logs` (Iran) va `ratholenode backhaul logs` (node)
+  + dokme-haye status/log dar hub baraye har do taraf.
+
+### Fixed
+- **gard-e backhaul-e chand-mashini (rishe-ye timeout-e gRPC):** backhaul 1:1 ast — YEK server،
+  YEK token-e sarasari va YEK majmoue-ye `ports`. gozashtan-e DO mashin-e kharej rooye backhaul
+  anha ra dar yek namespace jam mikonad، pas server nemidanad kodam connection be kodam mashin
+  beravad va anha ra eshtebahi masir midahad. neshane-ash `inbound_port`-e tekrari beyn-e
+  node-haye backhaul ast (masalan se node rooye 62050 = se mashin ke har kodam Pasargad ra anja
+  darand)، va gRPC avvalin ghorbani ast chon handshake/cert-esh ba peer-e eshtebah jour darnemiayad.
+  hala `backhaul node <name> on` hoshdar midahad va `doctor` an ra gozaresh mikonad.
+- `doctor` masir-e VAGHEI-ye control (`control_path`-e makhfi) ra ba `--http1.1` probe mikonad؛
+  ghablan faghat `/` ra mizad va zir-e HTTP/2 header-e Upgrade hazf mishod → **200-e doroughi**
+  dar hali ke tunnel salem/kharab bood.
+
 ## [1.6.1] - 2026-07-30
 
 behbood-e panel-e hub: namayesh-e DAGHIGH-e mode-e har node + kontrol-e per-node samt-e Iran.

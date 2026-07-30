@@ -160,5 +160,57 @@ class TestIranPerNodeActions(unittest.TestCase):
             self.assertIsNone(hub.build_iran_cmd(act, {"name": "trk02\n"}))
 
 
+class TestUpstreamLogsStatus(unittest.TestCase):
+    """upstream logs/status: read-only node actions ta upstream-ha ghabel-e ayb-yabi bashand."""
+
+    def test_upstream_logs_and_status_argv(self):
+        self.assertEqual(build_node_cmd("upstream_logs", {"id": "iranviph"}),
+                         ["ratholenode", "upstream", "logs", "iranviph"])
+        self.assertEqual(build_node_cmd("upstream_status", {"id": "iranviph"}),
+                         ["ratholenode", "upstream", "status", "iranviph"])
+
+    def test_upstream_logs_status_injection_rejected(self):
+        self.assertIsNone(build_node_cmd("upstream_logs", {"id": "a; rm -rf /"}))
+        self.assertIsNone(build_node_cmd("upstream_status", {"id": "a\n"}))
+
+    def test_upstream_logs_status_are_read_only(self):
+        self.assertNotIn("upstream_logs", WRITE_ACTIONS)
+        self.assertNotIn("upstream_status", WRITE_ACTIONS)
+
+
+class TestUpstreamCarrier(unittest.TestCase):
+    """hamel-e per-upstream: har upstream mesl-e tunnel-e asli ws/kcp/plain/noise darad."""
+
+    def test_plain_argv(self):
+        self.assertEqual(build_node_cmd("upstream_plain_on", {"id": "u1", "remote": "1.2.3.4:8880"}),
+                         ["ratholenode", "upstream", "plain", "u1", "on", "1.2.3.4:8880"])
+        self.assertEqual(build_node_cmd("upstream_plain_off", {"id": "u1"}),
+                         ["ratholenode", "upstream", "plain", "u1", "off"])
+
+    def test_noise_argv_and_pubkey_validation(self):
+        pk = "A" * 44
+        self.assertEqual(build_node_cmd("upstream_noise_on",
+                                        {"id": "u1", "remote": "1.2.3.4:2334", "pubkey": pk}),
+                         ["ratholenode", "upstream", "noise", "u1", "on", "1.2.3.4:2334", pk])
+        # pubkey-e namotabar bayad rad shavad
+        self.assertIsNone(build_node_cmd("upstream_noise_on",
+                                         {"id": "u1", "remote": "1.2.3.4:2334", "pubkey": "x"}))
+
+    def test_ws_reset_argv(self):
+        self.assertEqual(build_node_cmd("upstream_ws", {"id": "u1"}),
+                         ["ratholenode", "upstream", "ws", "u1"])
+
+    def test_carrier_actions_reject_injection(self):
+        for act in ("upstream_plain_off", "upstream_noise_off", "upstream_ws"):
+            self.assertIsNone(build_node_cmd(act, {"id": "u1; rm -rf /"}))
+        self.assertIsNone(build_node_cmd("upstream_plain_on",
+                                         {"id": "u1", "remote": "1.2.3.4:80; id"}))
+
+    def test_carrier_actions_are_writes(self):
+        for act in ("upstream_plain_on", "upstream_plain_off",
+                    "upstream_noise_on", "upstream_noise_off", "upstream_ws"):
+            self.assertIn(act, WRITE_ACTIONS, act)
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

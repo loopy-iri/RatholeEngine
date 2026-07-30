@@ -2355,7 +2355,10 @@ cmd_backhaul(){
       fi
       ;;
     show) print_backhaul_connect ;;
-    *) die "estefade: ratholectl backhaul <on [port] [transport] [profile]|off|node <name> on|off|status|show>" ;;
+    logs)
+      journalctl -u "$BH_SVC" -n "${1:-40}" --no-pager 2>/dev/null || true
+      ;;
+    *) die "estefade: ratholectl backhaul <on [port] [transport] [profile]|off|node <name> on|off|status|show|logs>" ;;
   esac
 }
 
