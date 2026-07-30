@@ -2310,22 +2310,25 @@ cmd_backhaul(){
           # transport-e har node YEKI ast (ws/noise/backhaul) — node-e noise ra sedaye khafi switch nakon.
           local cur; cur="$(jq -r --arg n "$name" '.nodes[] | select(.name==$n) | .transport // "ws"' "$STATE" 2>/dev/null)"
           [ "$cur" = noise ] && die "node '$name' rooye transport-e noise ast; aval 'ratholectl noise node $name off' ra bezan."
+          # GARD-e chand-mashini: backhaul 1:1 ast — YEK server + YEK token-e sarasari + YEK
+          # majmoue-ye 'ports'. agar DO mashin-e kharej ba haman token vasl shavand، sar-e
+          # channel-e kontrol ba ham daava mikonand va HAR DO ghat mishavand (na faghat dovomi).
+          # neshane-ash inbound-e YEKSAN beyn-e node-haye backhaul ast (yani do mashin ke har
+          # kodam haman service ra rooye haman port-e mahalli darand). rathole in moshkel ra
+          # nadarad chon har node token-e joda darad. GHABL az taghir-e state check mikonim.
+          local my_inb clash
+          my_inb="$(jq -r --arg n "$name" '.nodes[]|select(.name==$n)|.inbound_port' "$STATE" 2>/dev/null)"
+          clash="$(jq -r --arg n "$name" --argjson ib "${my_inb:-0}" \
+                   '[.nodes[]|select((.transport//"")=="backhaul" and .name!=$n and .inbound_port==$ib)|.name]
+                    | join(", ")' "$STATE" 2>/dev/null)"
+          if [ -n "$clash" ] && [ "$clash" != null ]; then
+            err "node '$name' inbound-e ${my_inb} darad ke node-e backhaul-e digari ham hamin ra darad: ${clash}"
+            err "backhaul 1:1 ast — faghat YEK mashin-e kharej mitavanad rooye backhaul bashad."
+            err "do mashin ba yek token → har DO tunnel ghat mishavad."
+            die "baraye in node az rathole estefade kon (ws/kcp/plain/noise)، ya aval '${clash}' ra backhaul off kon."
+          fi
           local tmp; tmp="$(mktemp)"; jq --arg n "$name" '(.nodes[] | select(.name==$n) | .transport) |= "backhaul"' "$STATE" > "$tmp" && mv "$tmp" "$STATE"
           log "node '$name' be backhaul switch shod (az rathole-server kharej shod)."
-          # HOSHDAR-e chand-mashini: backhaul 1:1 ast — YEK server + YEK token + YEK majmoue-ye
-          # 'ports'. agar do node-e backhaul inbound-e YEKSAN dashte bashand، yani do MASHIN-e
-          # kharej-e motefavet dar yek namespace jam shode-and va server nemidanad kodam
-          # connection be kodam mashin beravad → mis-routing va timeout (be vizhe gRPC-e
-          # Pasargad rooye 62050). rathole in moshkel ra nadarad chon har node token-e joda darad.
-          local dupp
-          dupp="$(jq -r '[.nodes[]|select((.transport//"")=="backhaul")|.inbound_port]
-                  | group_by(.) | map(select(length>1)) | flatten | unique | join(",")' \
-                  "$STATE" 2>/dev/null)"
-          if [ -n "$dupp" ] && [ "$dupp" != null ]; then
-            warn "chand node-e backhaul inbound-e YEKSAN darand (port: ${dupp})."
-            warn "backhaul 1:1 ast — faghat YEK mashin-e kharej mitavanad rooye backhaul bashad."
-            warn "baghye ra ba 'ratholectl backhaul node <name> off' be rathole (ws/kcp) bargardan."
-          fi
           regenerate
           print_backhaul_connect
           ;;

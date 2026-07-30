@@ -311,6 +311,7 @@ function renderIran(n,ov){
    <button class="gh" onclick="run('${n}','backhaul_logs')">${t('logs')}</button>
    <button class="s" onclick="bhNode('${n}','on')">${t('bh_node_on')}</button>
    <button class="s" onclick="bhNode('${n}','off')">${t('bh_node_off')}</button></div>
+   ${bhUsageLine(ov)}
    <div class="btns" style="margin-top:10px">
    <button class="g" onclick="if(confirm(t('cf_reapply')))run('${n}','regen_full')">${t('reapply')}</button>
    <button class="s" onclick="if(confirm(t('cf_restart')))run('${n}','restart')">${t('restart_rathole')}</button></div>
@@ -390,6 +391,30 @@ function iranNodeMode(ov,name){
  if(nd.transport==='noise'||((ov.noise||{}).nodes||[]).indexOf(name)>=0)return 'noise';
  return 'ws';
 }
+// ---------- backhaul: 1:1 ast — neshan bede kodam node-ha rooyash hastand ----------
+// backhaul YEK server + YEK token-e sarasari + YEK majmoue-ye ports darad. agar DO mashin-e
+// kharej ba haman token vasl shavand sar-e channel-e kontrol daava mikonand va HAR DO ghat
+// mishavand. neshane-ash inbound-e tekrari beyn-e node-haye backhaul ast.
+function bhNodes(ov){
+ return (((ov||{}).nodes)||[]).filter(x=>x&&x.transport==='backhaul');
+}
+function bhDupInbounds(ov){
+ const seen={},dup=[];
+ bhNodes(ov).forEach(x=>{const k=String(x.inbound||'');if(!k)return;
+  if(seen[k]){if(dup.indexOf(k)<0)dup.push(k);}else seen[k]=1;});
+ return dup;
+}
+function bhUsageLine(ov){
+ const list=bhNodes(ov); if(!list.length)return '';
+ const dup=bhDupInbounds(ov);
+ let s=`<div class="sub" style="margin-top:6px">${h(t('bh_users'))}: `
+      +list.map(x=>`<span class="badge b-backhaul">${h(x.name)}</span>`).join(' ')+'</div>';
+ if(dup.length){
+  s+=`<div class="sub" style="margin-top:4px;color:#f87171">⚠ ${h(t('bh_dup_warn').replace('%p',dup.join(', ')))}</div>`;
+ }
+ return s;
+}
+
 // badge-e mode ba class/rang-e hamsan ba baghye-ye UI.
 function modeBadge(mode){
  const cls={ws:'b-ws',kcp:'b-kcp',plain:'b-plain',noise:'b-noise',backhaul:'b-backhaul',game:'b-game'}[mode]||'b-ws';
@@ -912,7 +937,16 @@ async function provSrv(){const b={name:$('n').value,role:$('rl').value,host:$('h
  if(status===200){$('n').value='';$('hh').value='';$('sw').value='';loadAll();}}
 
 // ---------- form-based actions (bedoon prompt zanjire-i) ----------
-function gameAdd(n){formModal(t('t_game_add'),[
+// afzoodan-e node-e game (SNI): agar in AVALIN node-e SNI bashad، port 443 az L7 be
+// nginx stream/L4 (ssl_preread) switch mishavad va vhost-e L7 (sait-e fik + control-e
+// rathole + backhaul) be port-e dakheli montaghel mishavad. yani hameye node-haye aadi
+// az masir-e jadid obor mikonand — SNI-e eshtebah = ghat-e hame. pas ghabl az an bepors.
+function gameAdd(n){
+ const ov=OVS[n]||{};
+ const first=!((ov.game||[]).length);
+ const normal=((ov.nodes||[]).length)||0;
+ if(first && !confirm(t('cf_game_l4').replace('%n',String(normal)))) return;
+ formModal(t('t_game_add'),[
   {id:'name',label:t('f_name'),ph:'gmtrk',req:1},
   {id:'inbound',label:t('l_inb_tls'),val:'8444',req:1},
   {id:'sni',label:t('l_sni'),ph:'gmtrk.l1t.ir',req:1}],

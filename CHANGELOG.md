@@ -9,6 +9,11 @@ release.yml hamin bakhsh ra be onvan-e title/body-e GitHub Release montasher mik
 
 ## [Unreleased]
 
+## [1.6.2] - 2026-07-30
+
+upstream-ha hala shahrvand-e daraje-yek hastand (hamel + log + status mesl-e tunnel-e asli)،
+va rishe-ye timeout-e gRPC rooye backhaul-e chand-mashini basteh shod.
+
 ### Added
 - **hamel-e per-upstream (parity ba tunnel-e asli):** har upstream hala `ws|kcp|plain|noise`-e
   khodash ra darad — `ratholenode upstream <plain|noise|ws> <id> ...` + select dar hub (mesl-e
@@ -18,14 +23,22 @@ release.yml hamin bakhsh ra be onvan-e title/body-e GitHub Release montasher mik
 - **log-e backhaul:** `ratholectl backhaul logs` (Iran) va `ratholenode backhaul logs` (node)
   + dokme-haye status/log dar hub baraye har do taraf.
 
+- **namayesh-e mahdudiat-e backhaul dar hub:** bakhsh-e «hamel-haye dar dastras» hala node-haye
+  rooye backhaul ra list mikonad va agar inbound-e tekrari bashad hoshdar-e ghermez midahad.
+- **hoshdar ghabl az afzoodan-e avalin node-e SNI/game:** afzoodan-e an port 443 ra be stream/L4
+  switch mikonad va vhost-e L7 be port-e dakheli miravad — hala tedad-e node-haye aadi-ye
+  tahtetasir ra neshan midahad va taeed migirad.
+
 ### Fixed
 - **gard-e backhaul-e chand-mashini (rishe-ye timeout-e gRPC):** backhaul 1:1 ast — YEK server،
   YEK token-e sarasari va YEK majmoue-ye `ports`. gozashtan-e DO mashin-e kharej rooye backhaul
-  anha ra dar yek namespace jam mikonad، pas server nemidanad kodam connection be kodam mashin
-  beravad va anha ra eshtebahi masir midahad. neshane-ash `inbound_port`-e tekrari beyn-e
-  node-haye backhaul ast (masalan se node rooye 62050 = se mashin ke har kodam Pasargad ra anja
-  darand)، va gRPC avvalin ghorbani ast chon handshake/cert-esh ba peer-e eshtebah jour darnemiayad.
-  hala `backhaul node <name> on` hoshdar midahad va `doctor` an ra gozaresh mikonad.
+  anha ra dar yek namespace jam mikonad: har do ba haman token vasl mishavand، sar-e channel-e
+  kontrol daava mikonand va **HAR DO** ghat mishavand (na faghat dovomi). neshane-ash
+  `inbound_port`-e tekrari beyn-e node-haye backhaul ast (masalan se node rooye 62050 = se
+  mashin ke har kodam Pasargad ra anja darand)، va gRPC avvalin ghorbani ast chon
+  handshake/cert-esh ba peer-e eshtebah jour darnemiayad.
+  hala `backhaul node <name> on` GHABL az taghir-e state jelo-ye tadakhol ra migirad (die)،
+  `doctor` vaziat-e mojood ra gozaresh mikonad va hub an ra neshan midahad.
 - `doctor` masir-e VAGHEI-ye control (`control_path`-e makhfi) ra ba `--http1.1` probe mikonad؛
   ghablan faghat `/` ra mizad va zir-e HTTP/2 header-e Upgrade hazf mishod → **200-e doroughi**
   dar hali ke tunnel salem/kharab bood.

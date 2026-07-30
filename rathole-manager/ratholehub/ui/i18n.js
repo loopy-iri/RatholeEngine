@@ -72,6 +72,9 @@ const DICT={
   svc_tunnel:'servicehaye in tunnel',add_svc:'+ service',no_svc:'servisi nist.',c_svc:'service',
   upstreams:'serverhaye Iran-e digar (upstream)',add_up:'+ upstream',no_up:'upstream nadari (faghat yek Iran).',status:'status',del_up:'hazf upstream',cf_delup:'hazf upstream',cf_delupsvc:'hazf service az upstream',
   logs:'log',bh_logs:'log-e backhaul',
+  bh_users:'node-haye rooye backhaul',
+  bh_dup_warn:'do node-e backhaul inbound-e yeksan darand (port: %p). backhaul 1:1 ast — do mashin ba yek token HAR DO ghat mishavand. hameh joz yeki ra be rathole (ws/kcp) bargardan.',
+  cf_game_l4:'in AVALIN node-e SNI/game ast: port 443 be halat stream/L4 switch mishavad va vhost-e L7 be port-e dakheli miravad. %n node-e aadi az masir-e jadid obor khahand kard — SNI-e eshtebah hame ra ghat mikonad. edame bedam?',
   upcarrier_confirm:'hamel-e upstream «%n» be %s taghir konad? (samt-e an server-e Iran ham bayad hamin hamel faal bashad)',
   upcarrier_hint:'har upstream yek server-e Iran-e mostaghel ast — hamel-e khodash ra darad (mesl-e tunnel-e asli).',
 
@@ -218,6 +221,9 @@ const DICT={
   svc_tunnel:'Services on this tunnel',add_svc:'+ service',no_svc:'No services.',c_svc:'Service',
   upstreams:'Other Iran servers (upstream)',add_up:'+ upstream',no_up:'No upstream (single Iran).',status:'status',del_up:'Remove upstream',cf_delup:'Remove upstream',cf_delupsvc:'Remove service from upstream',
   logs:'logs',bh_logs:'backhaul logs',
+  bh_users:'nodes on backhaul',
+  bh_dup_warn:'Two backhaul nodes share an inbound port (%p). Backhaul is 1:1 — two machines on one token knock EACH OTHER out. Move all but one back to rathole (ws/kcp).',
+  cf_game_l4:'This is the FIRST SNI/game node: port 443 switches to stream/L4 and the L7 vhost moves to an internal port. %n normal node(s) will route through the new path — a wrong SNI drops them all. Continue?',
   upcarrier_confirm:'Switch upstream "%n" carrier to %s? (that Iran server must have the same carrier enabled)',
   upcarrier_hint:'Each upstream is an independent Iran server — it has its own carrier (like the main tunnel).',
 
