@@ -2312,6 +2312,20 @@ cmd_backhaul(){
           [ "$cur" = noise ] && die "node '$name' rooye transport-e noise ast; aval 'ratholectl noise node $name off' ra bezan."
           local tmp; tmp="$(mktemp)"; jq --arg n "$name" '(.nodes[] | select(.name==$n) | .transport) |= "backhaul"' "$STATE" > "$tmp" && mv "$tmp" "$STATE"
           log "node '$name' be backhaul switch shod (az rathole-server kharej shod)."
+          # HOSHDAR-e chand-mashini: backhaul 1:1 ast — YEK server + YEK token + YEK majmoue-ye
+          # 'ports'. agar do node-e backhaul inbound-e YEKSAN dashte bashand، yani do MASHIN-e
+          # kharej-e motefavet dar yek namespace jam shode-and va server nemidanad kodam
+          # connection be kodam mashin beravad → mis-routing va timeout (be vizhe gRPC-e
+          # Pasargad rooye 62050). rathole in moshkel ra nadarad chon har node token-e joda darad.
+          local dupp
+          dupp="$(jq -r '[.nodes[]|select((.transport//"")=="backhaul")|.inbound_port]
+                  | group_by(.) | map(select(length>1)) | flatten | unique | join(",")' \
+                  "$STATE" 2>/dev/null)"
+          if [ -n "$dupp" ] && [ "$dupp" != null ]; then
+            warn "chand node-e backhaul inbound-e YEKSAN darand (port: ${dupp})."
+            warn "backhaul 1:1 ast — faghat YEK mashin-e kharej mitavanad rooye backhaul bashad."
+            warn "baghye ra ba 'ratholectl backhaul node <name> off' be rathole (ws/kcp) bargardan."
+          fi
           regenerate
           print_backhaul_connect
           ;;
@@ -2453,6 +2467,18 @@ cmd_doctor(){
       printf '  %s node %s rooye port %s gvsh nmidhd (klaint node vsl nist?)\n' "$(c_y 'WARN')" "$n" "$p"
     fi
   done
+
+  # backhaul 1:1 ast: inbound-e tekrari beyn-e node-haye backhaul yani chand MASHIN-e kharej
+  # dar yek namespace → mis-routing/timeout (khososan gRPC). inja loo midahim.
+  local bh_dup
+  bh_dup="$(jq -r '[.nodes[]|select((.transport//"")=="backhaul")|.inbound_port]
+            | group_by(.) | map(select(length>1)) | flatten | unique | join(",")' "$STATE" 2>/dev/null)"
+  if [ -n "$bh_dup" ] && [ "$bh_dup" != null ]; then
+    echo "$(c_g '== barresi backhaul ==')"
+    printf '  %s node-haye backhaul inbound-e tekrari darand (port: %s)\n' "$(c_r 'FAIL')" "$bh_dup"
+    printf '       backhaul 1:1 ast — faghat YEK mashin-e kharej mitavanad rooye backhaul bashad.\n'
+    bad=$((bad+1))
+  fi
 
   echo "$(c_g '== tst tmaiz sait fik / channel kontroli (az rooye hamin server) ==')"
   if command -v curl >/dev/null 2>&1; then
