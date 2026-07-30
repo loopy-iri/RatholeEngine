@@ -2456,14 +2456,30 @@ cmd_doctor(){
 
   echo "$(c_g '== tst tmaiz sait fik / channel kontroli (az rooye hamin server) ==')"
   if command -v curl >/dev/null 2>&1; then
-    local root_code ws_out
-    root_code="$(curl -s -o /dev/null -w '%{http_code}' -k "https://$domain/" --resolve "$domain:443:127.0.0.1" 2>/dev/null || echo 000)"
-    echo "  drkhvast aadi be / → kd HTTP: $(c_y "$root_code") (bayad sait fik/panel ra bdhd)"
-    ws_out="$(curl -s -o /dev/null -w '%{http_code}' -k \
-      -H 'Connection: Upgrade' -H 'Upgrade: websocket' \
-      -H 'Sec-WebSocket-Version: 13' -H 'Sec-WebSocket-Key: dGhlIHNhbXBsZQ==' \
+    local root_code ws_root ws_cp cp
+    # control_path-e makhfi (/_rh/<hex>) az state; agar nabashad '/' (fallback-e rishh).
+    cp="$(jq -r '.control_path // "/"' "$STATE" 2>/dev/null)"; [ -n "$cp" ] || cp="/"
+    local wsh=(-H 'Connection: Upgrade' -H 'Upgrade: websocket'
+               -H 'Sec-WebSocket-Version: 13' -H 'Sec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==')
+    # MOHEM: --http1.1 EJBARI ast. bedoon-e an curl mitavanad HTTP/2 mozakere konad va
+    # nginx header-e Upgrade ra dar h2 hazf mikonad → map be default (sait-e fik) miravad →
+    # kod-e 200-e DOROUGHI (dar hali ke tunnel salem ast). in daghighan bug-e ghadimi bood.
+    root_code="$(curl -s --http1.1 -o /dev/null -w '%{http_code}' -k \
       "https://$domain/" --resolve "$domain:443:127.0.0.1" 2>/dev/null || echo 000)"
-    echo "  drkhvast websocket be / → kd HTTP: $(c_y "$ws_out") (101=rthvl, ghir an=be fik rfth)"
+    echo "  drkhvast aadi be / → kd HTTP: $(c_y "$root_code") (bayad sait fik/panel ra bdhd)"
+    ws_root="$(curl -s --http1.1 -o /dev/null -w '%{http_code}' -k \
+      "${wsh[@]}" "https://$domain/" --resolve "$domain:443:127.0.0.1" 2>/dev/null || echo 000)"
+    echo "  websocket be / (fallback) → kd HTTP: $(c_y "$ws_root") (101=rthvl, ghir an=be fik rfth)"
+    # channel-e VAGHEI ke node be an vasl mishavad: masir-e makhfi. 101 inja = salem.
+    if [ "$cp" != "/" ]; then
+      ws_cp="$(curl -s --http1.1 -o /dev/null -w '%{http_code}' -k \
+        "${wsh[@]}" "https://$domain${cp}" --resolve "$domain:443:127.0.0.1" 2>/dev/null || echo 000)"
+      if [ "$ws_cp" = 101 ]; then
+        printf '  %s control-path WS (%s) → 101 (kontrol salem)\n' "$(c_g 'OK ')" "$cp"; ok=$((ok+1))
+      else
+        printf '  %s control-path WS (%s) → %s (entezar 101)\n' "$(c_r 'FAIL')" "$cp" "$ws_cp"; bad=$((bad+1))
+      fi
+    fi
   else
     warn "curl nasb nist; tst HTTP rad shod."
   fi
